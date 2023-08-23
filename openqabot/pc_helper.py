@@ -70,13 +70,16 @@ def apply_publiccloud_pint_image(settings):
             images = pint_query(f"{settings['PUBLIC_CLOUD_PINT_QUERY']}{state}.json")[
                 "images"
             ]
+
             image = get_recent_pint_image(
                 images, settings["PUBLIC_CLOUD_PINT_NAME"], region, state=state
             )
             if image is not None:
+                log.debug("PINT image %s", image)
                 break
         if image is None:
             raise ValueError("Cannot find matching image in pint")
+        log.debug("PINT result:%s", image)
         settings["PUBLIC_CLOUD_IMAGE_ID"] = image[settings["PUBLIC_CLOUD_PINT_FIELD"]]
         settings["PUBLIC_CLOUD_IMAGE_NAME"] = image["name"]
         settings["PUBLIC_CLOUD_IMAGE_STATE"] = image["state"]
@@ -97,6 +100,7 @@ def apply_publiccloud_pint_image(settings):
             del settings["PUBLIC_CLOUD_PINT_REGION"]
         if "PUBLIC_CLOUD_PINT_FIELD" in settings:
             del settings["PUBLIC_CLOUD_PINT_FIELD"]
+    log.debug("PINT settings %s", settings)
     return settings
 
 

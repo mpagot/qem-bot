@@ -26,6 +26,7 @@ class Aggregate(BaseConf):
         self.archs = config["archs"]
         self.onetime = config.get("onetime", False)
         self.test_issues = self.normalize_repos(config)
+        log.debug("Create aggregate for flavor:%s", self.flavor)
 
     @staticmethod
     def normalize_repos(config):
@@ -95,6 +96,7 @@ class Aggregate(BaseConf):
                     # if filtering embargoed updates is off we ignoring this field
                     else:
                         valid_incidents.append(i)
+            log.debug("Valid incidents:%s", valid_incidents)
             for issue, template in self.test_issues.items():
                 for inc in valid_incidents:
                     if (
@@ -157,12 +159,14 @@ class Aggregate(BaseConf):
             # if set, we use this query to detect latest public cloud tools image which used for running
             # all public cloud related tests in openQA
             if "PUBLIC_CLOUD_TOOLS_IMAGE_QUERY" in settings:
+                log.debug("Check value for PUBLIC_CLOUD_TOOLS_IMAGE_BASE")
                 settings = apply_pc_tools_image(settings)
                 if not settings.get("PUBLIC_CLOUD_TOOLS_IMAGE_BASE", False):
                     continue
 
             # parse Public-Cloud pint query if present
             if "PUBLIC_CLOUD_PINT_QUERY" in settings:
+                log.debug("Check value for PUBLIC_CLOUD_PINT_QUERY ")
                 settings = apply_publiccloud_pint_image(settings)
                 if not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
                     continue
@@ -182,6 +186,7 @@ class Aggregate(BaseConf):
                 str(inc) for inc in set(full_post["qem"]["incidents"])
             ]
             if not full_post["qem"]["incidents"]:
+                log.debug("Skip for missing qem::incidents")
                 continue
 
             full_post["openqa"]["__DASHBOARD_INCIDENTS_URL"] = ",".join(
@@ -202,4 +207,5 @@ class Aggregate(BaseConf):
             # add to ret
             ret.append(full_post)
 
+        log.debug("Aggregate calls produced %d posts.", len(ret))
         return ret

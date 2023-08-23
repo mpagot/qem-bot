@@ -18,6 +18,7 @@ class Incidents(BaseConf):
         super().__init__(product, settings, config)
         self.flavors = self.normalize_repos(config["FLAVOR"])
         self.singlearch = extrasettings
+        log.debug("Create incident for flavor:%s", self.flavors.keys())
 
     def __repr__(self):
         return f"<Incidents product: {self.product}>"
@@ -114,14 +115,17 @@ class Incidents(BaseConf):
                         full_post["openqa"]["__CI_JOB_URL"] = ci_url
 
                     if inc.staging:
+                        log.debug("INCIDENT::CALL staging")
                         continue
 
                     if "packages" in data:
                         if not inc.contains_package(data["packages"]):
+                            log.debug("INCIDENT::CALL no packages")
                             continue
 
                     if "excluded_packages" in data:
                         if inc.contains_package(data["excluded_packages"]):
+                            log.debug("INCIDENT::CALL excluded packages")
                             continue
 
                     if inc.livepatch:
@@ -161,6 +165,7 @@ class Incidents(BaseConf):
 
                     if "required_issues" in data:
                         if set(issue_dict.keys()).isdisjoint(data["required_issues"]):
+                            log.debug("INCIDENT::CALL required_issues")
                             continue
 
                     if not ignore_onetime and self._is_scheduled_job(
@@ -255,14 +260,18 @@ class Incidents(BaseConf):
                     # if set, we use this query to detect latest public cloud tools image which used for running
                     # all public cloud related tests in openQA
                     if "PUBLIC_CLOUD_TOOLS_IMAGE_QUERY" in settings:
+                        log.debug("INCIDENT::CALL PUBLIC_CLOUD_TOOLS_IMAGE_QUERY")
                         settings = apply_pc_tools_image(settings)
                         if not settings.get("PUBLIC_CLOUD_TOOLS_IMAGE_BASE", False):
+                            log.debug("INCIDENT::CALL missing PUBLIC_CLOUD_TOOLS_IMAGE_BASE")
                             continue
 
                     # parse Public-Cloud pint query if present
                     if "PUBLIC_CLOUD_PINT_QUERY" in settings:
+                        log.debug("INCIDENT::CALL PUBLIC_CLOUD_PINT_QUERY")
                         settings = apply_publiccloud_pint_image(settings)
                         if not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
+                            log.debug("INCIDENT::CALL missing PUBLIC_CLOUD_IMAGE_ID")
                             continue
 
                     full_post["openqa"] = settings

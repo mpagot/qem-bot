@@ -27,10 +27,11 @@ def load_metadata(
     path: Path, aggregate: bool, incidents: bool, extrasettings: Set[str]
 ) -> List[Union[Aggregate, Incidents]]:
     ret: List[Union[Aggregate, Incidents]] = []
-
+    log.debug("Run load_metadata aggregate:%s incidents:%s", aggregate, incidents)
     loader = YAML(typ="safe")
 
     for p in get_yml_list(path):
+        log.debug("Processing YML %s", p)
         try:
             data = loader.load(p)
         except Exception as e:
@@ -40,26 +41,34 @@ def load_metadata(
         try:
             settings = data.get("settings")
         except AttributeError:
-            # not valid yaml for bot settings
+            log.debug("not valid yaml %s for bot settings", p)
             continue
 
         if "product" not in data:
             log.debug("Skipping invalid config %s" % p)
             continue
 
-        if settings:
-            for key in data:
-                if key == "incidents" and not incidents:
-                    ret.append(
-                        Incidents(data["product"], settings, data[key], extrasettings)
-                    )
-                elif key == "aggregate" and not aggregate:
-                    try:
-                        ret.append(Aggregate(data["product"], settings, data[key]))
-                    except NoTestIssues:
-                        log.warning("No 'test_issues' in %s config" % data["product"])
-                else:
-                    continue
+        if not settings:
+            log.debug("No settings in %s", p)
+            continue
+
+        for key in data:
+            log.debug("Processing key:%s", key)
+            if key == "incidents" and not incidents:
+                log.debug("Append incident")
+                ret.append(
+                    Incidents(data["product"], settings, data[key], extrasettings)
+                )
+            elif key == "aggregate" and not aggregate:
+                try:
+                    log.debug("Append aggregate")
+                    ret.append(Aggregate(data["product"], settings, data[key]))
+                except NoTestIssues:
+                    log.warning("No 'test_issues' in %s config" % data["product"])
+            else:
+                log.debug("Nothing to append for key %s", key)
+                continue
+    log.debug("Number of workers:%d", len(ret))
     return ret
 
 
