@@ -14,12 +14,41 @@ version_pattern = re.compile(r"(\d+(?:[.-](?:SP)?\d+)?)")
 
 class Incident:
     def __init__(self, incident):
+        log.debug("Incident %d with %d channels", incident['number'], len(incident['channels']))
         self.rr = incident["rr_number"]
         self.project = incident["project"]
         self.id = incident["number"]
         self.rrid = f"{self.project}:{self.rr}" if self.rr else None
         self.staging = not incident["inReview"]
         self.embargoed = incident["embargoed"]
+
+        no_update_channels = [r for r in incident['channels'] if not r.startswith("SUSE:Updates")]
+        log.debug("Channels not starting with 'SUSE:Updates' are %d", len(no_update_channels))
+
+        no_3_val = [
+                val for val in (
+                    r.split(":")[2:]
+                    for r in incident["channels"]
+                    if r.startswith("SUSE:Updates")
+                )
+                if len(val) != 3
+        ]
+        log.debug("Channels not having the right name lenght are %d", len(no_3_val))
+
+        smdto_channels = [
+            p
+            for p, v, a in (
+                val
+                for val in (
+                    r.split(":")[2:]
+                    for r in incident["channels"]
+                    if r.startswith("SUSE:Updates")
+                )
+                if len(val) == 3
+            )
+            if p == "SLE-Module-Development-Tools-OBS"
+        ]
+        log.debug("Channels 'SLE-Module-Development-Tools-OBS' are %d", len(smdto_channels))
 
         self.channels = [
             Repos(p, v, a)
@@ -60,9 +89,11 @@ class Incident:
             )
         ]
 
+        log.debug("Check for empty channels")
         if not self.channels:
             raise EmptyChannels(self.project)
 
+        log.debug("Check for empty packages")
         self.packages = sorted(incident["packages"], key=len)
         if not self.packages:
             raise EmptyPackagesError(self.project)
@@ -70,6 +101,7 @@ class Incident:
         self.emu = incident["emu"]
         self.revisions = self._rev(self.channels, self.project)
         self.livepatch: bool = self._is_livepatch(self.packages)
+        log.debug("Incident %d DONE", incident['number'])
 
     @staticmethod
     def _rev(channels: List[Repos], project: str) -> Dict[ArchVer, int]:

@@ -28,6 +28,7 @@ class OpenQABot:
         self.workers = load_metadata(
             args.configs, args.disable_aggregates, args.disable_incidents, extrasettings
         )
+        log.debug("Loaded %d workers.", len(self.workers))
 
         self.openqa = openQAInterface(args)
         self.ci = environ.get("CI_JOB_URL")

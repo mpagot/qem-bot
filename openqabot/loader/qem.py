@@ -34,6 +34,7 @@ class JobAggr(NamedTuple):
 
 
 def get_incidents(token: Dict[str, str]) -> List[Incident]:
+    log.debug("Query:%s", QEM_DASHBOARD + "api/incidents")
     incidents = requests.get(
         QEM_DASHBOARD + "api/incidents", headers=token, verify=True
     ).json()
@@ -44,6 +45,7 @@ def get_incidents(token: Dict[str, str]) -> List[Incident]:
     xs = []
     for i in incidents:
         try:
+            log.debug("Processing:%s", i['number'])
             xs.append(Incident(i))
         except NoRepoFoundError as e:
             log.info(
