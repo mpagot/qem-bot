@@ -5,6 +5,7 @@ from openqabot.pc_helper import (
     apply_publiccloud_pint_image,
     get_latest_tools_image,
     get_recent_pint_image,
+    apply_sles4sap_pint_image,
 )
 import openqabot.pc_helper
 
@@ -85,6 +86,221 @@ def test_apply_publiccloud_pint_image(monkeypatch):
     assert "PUBLIC_CLOUD_PINT_NAME" not in settings
     assert "PUBLIC_CLOUD_PINT_REGION" not in settings
     assert "PUBLIC_CLOUD_PINT_FIELD" not in settings
+
+
+def test_apply_sles4sap_pint_image_invalid_csp():
+    res = apply_sles4sap_pint_image(
+        cloud_provider="Guybrush", pint_query=None, name_filter=None
+    )
+    assert res == {}
+
+
+def test_apply_sles4sap_pint_image_invalid_url(monkeypatch):
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_query="DinkyIsland", name_filter=None
+    )
+    assert res == {}
+
+
+def test_apply_sles4sap_pint_image_none_match_pint(monkeypatch):
+    monkeypatch.setattr(
+        openqabot.pc_helper, "pint_query", lambda *args, **kwargs: {"images": []}
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE",
+        pint_query="http://DinkyIsland/",
+        name_filter="StanStanman",
+    )
+    assert res == {}
+
+
+def test_apply_sles4sap_pint_image_unexpected_format(monkeypatch):
+    """
+    What is happening when the JSON structure returned
+    by PINT does not have fields that the script expect to be
+    present in Azure images?
+    """
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {"images": [{"Elaine": "Marley"}]},
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE",
+        pint_query="http://DinkyIsland/",
+        name_filter="StanStanman",
+    )
+    assert res == {}
+
+
+def test_apply_sles4sap_pint_image_none_match_name(monkeypatch):
+    """
+    What is happening when the JSON structure returned
+    by PINT does not have the name matching with requested filter?
+    """
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [{"name": "ElaineMarley", "urn": "TriIslandArea"}]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE",
+        pint_query="http://DinkyIsland/",
+        name_filter="StanStanman",
+    )
+    assert res == {}
+
+
+def test_apply_sles4sap_pint_image_azure(monkeypatch):
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "urn": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_query="http://DinkyIsland/", name_filter="Elaine"
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandArea"
+
+
+def test_apply_sles4sap_pint_image_gce(monkeypatch):
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "project": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="GCE", pint_query="http://DinkyIsland/", name_filter="Elaine"
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandArea/ElaineMarley"
+
+
+def test_apply_sles4sap_pint_image_ec2(monkeypatch):
+    """
+    Simulate PINT only to have one active image in one region.
+    Request images using matching name and region
+    """
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "id": "RootBeer",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "TriIslandArea",
+                }
+            ]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="EC2",
+        pint_query="http://DinkyIsland/",
+        name_filter="Elaine",
+        region_list=["TriIslandArea"],
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "ElaineMarley"
+
+
+def test_apply_sles4sap_pint_image_ec2_multiple_regions(monkeypatch):
+    """
+    Simulate PINT to have same image in two regions.
+    In AWS it is tipical to have same image available in multiple regions: all of the image
+    has the same name but different AMI (recorded in PINT under 'id' key)
+    Request images using matching name and region list
+    """
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "id": "RootBeer",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "MêléeIsland",
+                },
+                {
+                    "name": "ElaineMarley",
+                    "id": "BananaPicker",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "HookIsle",
+                },
+            ]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="EC2",
+        pint_query="http://DinkyIsland/",
+        name_filter="Elaine",
+        region_list=["MêléeIsland", "HookIsle"],
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "ElaineMarley"
+    assert res["SLES4SAP_QESAP_OS_VER_REGIONS"] == "MêléeIsland;HookIsle"
+    assert res["SLES4SAP_QESAP_OS_VER_ID"] == "RootBeer;BananaPicker"
+
+
+def test_apply_sles4sap_pint_image_ec2_multiple_regions_filtered(monkeypatch):
+    """
+    Simulate PINT to have same image in two regions AAA and BBB.
+    Request images using matching name but region list like AAA and CCC.
+    Expected result is that only AAA image is returned
+    """
+    monkeypatch.setattr(
+        openqabot.pc_helper,
+        "pint_query",
+        lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "id": "RootBeer",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "MêléeIsland",
+                },
+                {
+                    "name": "ElaineMarley",
+                    "id": "BananaPicker",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "HookIsle",
+                },
+            ]
+        },
+    )
+    res = apply_sles4sap_pint_image(
+        cloud_provider="EC2",
+        pint_query="http://DinkyIsland/",
+        name_filter="Elaine",
+        region_list=["MêléeIsland", "MonkeyIsland"],
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "ElaineMarley"
+    assert res["SLES4SAP_QESAP_OS_VER_REGIONS"] == "MêléeIsland"
+    assert res["SLES4SAP_QESAP_OS_VER_ID"] == "RootBeer"
 
 
 def test_get_recent_pint_image():

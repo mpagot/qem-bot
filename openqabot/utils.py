@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 import logging
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, List
+from pathlib import Path
 
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -19,6 +20,20 @@ def create_logger(name: str) -> logging.Logger:
     log.addHandler(handler)
     log.setLevel(logging.INFO)
     return log
+
+
+def get_yml_list(path: Path) -> List[Path]:
+    """
+    Create a list of YML filesnames from a folder
+    or from a single file path.
+    """
+    yml_list = []
+    extension = "*.yml"
+    if path.is_file() and path.match(extension):
+        yml_list.append(path)
+    else:
+        yml_list = [p for p in path.glob(extension)]
+    return yml_list
 
 
 def walk(inc):

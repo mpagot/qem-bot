@@ -47,7 +47,7 @@ def apply_pc_tools_image(settings):
 @lru_cache(maxsize=None)
 def pint_query(query):
     """
-    Perform a pint query. Sucessive queries are cached
+    Perform a pint query. Successive queries are cached
     """
     return requests.get(query).json()
 
@@ -100,9 +100,135 @@ def apply_publiccloud_pint_image(settings):
     return settings
 
 
+def get_pint_image(name_filter, field, state, query, region=None):
+    """
+    get list of images, search the one with name
+    matching the filter and return the newest one.
+
+    Return dictionary has NAME and ID
+    """
+    settings = {}
+    try:
+        image = None
+        url = f"{query}{state}.json"
+        log.debug("Pint url:%s name_filter:%s region:%s", url, name_filter, region)
+        images = pint_query(url)["images"]
+        image = get_recent_pint_image(images, name_filter, region=region, state=state)
+        log.debug("image:%s", image)
+        if image is None:
+            raise ValueError(
+                f"Cannot find matching image in PINT with name:[{name_filter}] and state:{state}"
+            )
+        if field not in image.keys() or "name" not in image.keys():
+            raise ValueError(
+                f"Cannot find expected keys in the selected image dictionary"
+            )
+        settings["ID"] = image[field]
+        settings["NAME"] = image["name"]
+    except BaseException as e:
+        log.warning(f"get_pint_image handling failed: {e}")
+    log.debug("settings:%s", settings)
+    return settings
+
+
+def sles4sap_pint_azure(name_filter, state, pint_query):
+    """
+    Query PINT about Azure images and retrieve the latest one
+    """
+    job_settings = {}
+    ret = get_pint_image(
+        name_filter=name_filter, field="urn", state=state, query=pint_query
+    )
+    if any(ret):
+        job_settings["SLES4SAP_QESAP_OS_VER"] = ret["ID"]
+        job_settings["SLES4SAP_QESAP_OS_STATE"] = state
+    return job_settings
+
+
+def sles4sap_pint_gce(name_filter, state, pint_query):
+    """
+    Query PINT about GCE images and retrieve the latest one
+    """
+    job_settings = {}
+    ret = get_pint_image(
+        name_filter=name_filter,
+        field="project",
+        state=state,
+        query=pint_query,
+    )
+    if any(ret):
+        job_settings["SLES4SAP_QESAP_OS_VER"] = f"{ret['ID']}/{ret['NAME']}"
+        job_settings["SLES4SAP_QESAP_OS_STATE"] = state
+    return job_settings
+
+
+def sles4sap_pint_ec2(name_filter, state, pint_query, region_list):
+    """
+    Query PINT about EC2 images and retrieve the latest one
+    for each of the requested regions.
+    Returned data is organized in a different way from sles4sap_pint_azure
+    and sles4sap_pint_gce
+    """
+    job_settings = {}
+    images_list = {}
+    for this_region in region_list:
+        ret = get_pint_image(
+            name_filter=name_filter,
+            field="id",
+            state=state,
+            query=pint_query,
+            region=this_region,
+        )
+        if any(ret):
+            images_list[this_region] = ret
+    if any(images_list):
+        # All element should have same name, just get the first
+        job_settings["SLES4SAP_QESAP_OS_VER"] = next(iter(images_list.items()))[1][
+            "NAME"
+        ]
+        job_settings["SLES4SAP_QESAP_OS_VER_STATE"] = state
+        job_settings["SLES4SAP_QESAP_OS_OWNER"] = "aws-marketplace"
+        # Pack all pairs region/AMI in a ';' separated values string
+        setting_regions = []
+        setting_ami = []
+        for image_region, image_settings in images_list.items():
+            setting_regions.append(image_region)
+            setting_ami.append(image_settings["ID"])
+        job_settings["SLES4SAP_QESAP_OS_VER_REGIONS"] = ";".join(setting_regions)
+        job_settings["SLES4SAP_QESAP_OS_VER_ID"] = ";".join(setting_ami)
+    return job_settings
+
+
+def apply_sles4sap_pint_image(
+    cloud_provider, pint_query, name_filter, region_list=None
+):
+    """
+    Applies OS_IMAGE relates settings based on the given SLES4SAP_IMAGE_REGEX
+    """
+    job_settings = {}
+    for state in ["active", "inactive"]:
+        if "AZURE" in cloud_provider:
+            job_settings = sles4sap_pint_azure(name_filter, state, pint_query)
+        elif "GCE" in cloud_provider:
+            job_settings = sles4sap_pint_gce(name_filter, state, pint_query)
+        elif "EC2" in cloud_provider:
+            job_settings = sles4sap_pint_ec2(
+                name_filter, state, pint_query, region_list
+            )
+        if any(job_settings):
+            break
+    log.debug("Sles4sap job settings:%s", job_settings)
+    return job_settings
+
+
 def get_recent_pint_image(images, name_regex, region=None, state="active"):
     """
-    From the given set of images (received json from pint), get the latest one that matches the given criteria (name given as regular expression, region given as string, and state given the state of the image)
+    From the given set of images (received json from pint),
+    get the latest one that matches the given criteria:
+     - name given as regular expression,
+     - region given as string,
+     - state given the state of the image
+
     Get the latest one based on 'publishedon'
     """
 
@@ -116,8 +242,11 @@ def get_recent_pint_image(images, name_regex, region=None, state="active"):
         region = None
     recentimage = None
     for image in images:
-        # Apply selection criteria. state and region criteria can be omitted by setting the corresponding variable to None
-        # This is required, because certain public cloud providers do not make a distinction on e.g. the region and thus this check is not needed there
+        # Apply selection criteria: state and region criteria
+        # can be omitted by setting the corresponding variable to None
+        # This is required, because certain public cloud providers
+        # do not make a distinction on e.g. the region
+        # and thus this check is not needed there
         if name.match(image["name"]) is None:
             continue
         if (state is not None) and (image["state"] != state):

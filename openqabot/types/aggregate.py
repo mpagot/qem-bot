@@ -10,7 +10,11 @@ from . import ProdVer, Repos
 from .. import DOWNLOAD_BASE, QEM_DASHBOARD
 from ..errors import NoTestIssues, SameBuildExists
 from ..loader.repohash import merge_repohash
-from ..pc_helper import apply_pc_tools_image, apply_publiccloud_pint_image
+from ..pc_helper import (
+    apply_pc_tools_image,
+    apply_publiccloud_pint_image,
+    apply_sles4sap_pint_image,
+)
 from ..utils import retry3 as requests
 from .baseconf import BaseConf
 from .incident import Incident
@@ -80,6 +84,7 @@ class Aggregate(BaseConf):
             # only testing queue and not livepatch
             valid_incidents = list()
             for i in incidents:
+                log.debug("i:%s", i)
                 if not any((i.livepatch, i.staging)):
                     # if filtering embargoed updates is on
                     if self.filter_embargoed():
@@ -95,8 +100,19 @@ class Aggregate(BaseConf):
                     # if filtering embargoed updates is off we ignoring this field
                     else:
                         valid_incidents.append(i)
+            log.debug(
+                "0000000000000000000 test_issues:%s valid_incidents:%s",
+                self.test_issues,
+                valid_incidents,
+            )
             for issue, template in self.test_issues.items():
                 for inc in valid_incidents:
+                    log.debug(
+                        "000000000000 inc:%s template:%s repo:%s",
+                        inc,
+                        template,
+                        Repos(template.product, template.version, issues_arch),
+                    )
                     if (
                         Repos(template.product, template.version, issues_arch)
                         in inc.channels
@@ -162,16 +178,26 @@ class Aggregate(BaseConf):
                     continue
 
             # parse Public-Cloud pint query if present
+            log.debug("444444444444444444444 settings:%s", settings)
             if "PUBLIC_CLOUD_PINT_QUERY" in settings:
+                log.debug("-" * 30)
                 settings = apply_publiccloud_pint_image(settings)
                 if not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
                     continue
+
+            # parse SLES4SAP pint query if present
+            if "SLES4SAP_PINT_QUERY" in settings:
+                settings = apply_sles4sap_pint_image("", "", "")
+                if not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
+                    continue
+            log.debug("5555555555555555555555 settings:%s", settings)
 
             full_post["openqa"].update(settings)
             full_post["openqa"]["FLAVOR"] = self.flavor
             full_post["openqa"]["ARCH"] = arch
             full_post["openqa"]["_OBSOLETE"] = 1
 
+            log.debug("1111111111111111 test_incidents:%s", test_incidents)
             for template, issues in test_incidents.items():
                 full_post["openqa"][template] = ",".join(str(x) for x in issues)
                 full_post["qem"]["incidents"] += issues
@@ -181,8 +207,10 @@ class Aggregate(BaseConf):
             full_post["qem"]["incidents"] = [
                 str(inc) for inc in set(full_post["qem"]["incidents"])
             ]
+            log.debug("222222222222222 %s", full_post["qem"]["incidents"])
             if not full_post["qem"]["incidents"]:
                 continue
+            log.debug("333333333333333 full_post:%s", full_post)
 
             full_post["openqa"]["__DASHBOARD_INCIDENTS_URL"] = ",".join(
                 f"{QEM_DASHBOARD}incident/{inc}"
