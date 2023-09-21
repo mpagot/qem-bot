@@ -4,8 +4,8 @@ import pytest
 
 def test_aggregate_constructor():
     """
-    What is the bare minimal set of argument
-    needed by the constructor ?
+    What is the bare minimal set of arguments
+    needed by the constructor?
     """
     config = {}
     config["FLAVOR"] = None
@@ -28,8 +28,8 @@ def test_aggregate_printable():
 
 def test_aggregate_call():
     """
-    What is the bare minimal set of argument
-    needed by the callable instance?
+    What is the bare minimal set of arguments
+    needed by the callable?
     """
     config = {}
     config["FLAVOR"] = None
