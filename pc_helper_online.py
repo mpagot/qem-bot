@@ -8,7 +8,6 @@ from ruamel.yaml import YAML
 from openqabot.pc_helper import apply_pc_tools_image, apply_publiccloud_pint_image, sles4sap_query_flavor
 from openqabot.utils import create_logger, get_yml_list
 
-log = create_logger("pc_helper_online")
 
 def main():
     """
@@ -18,6 +17,7 @@ def main():
     As input it getting directory with openqabot configuration metadata (same folder as bot-ng )
     but processing only variables related to openqabot.pc_helper module
     """
+    log = create_logger("pc_helper_online")
     parser = ArgumentParser(
         prog="pc_helper_online",
         description="Dummy code to test functionality related to pc_helper code",
