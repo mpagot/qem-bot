@@ -1,4 +1,8 @@
+# Copyright SUSE LLC
+# SPDX-License-Identifier: MIT
+
 from openqabot.types.aggregate import Aggregate
+from unittest import mock
 import pytest
 
 
@@ -60,7 +64,7 @@ def request_mock(monkeypatch):
 
     monkeypatch.setattr(
         "openqabot.types.aggregate.requests.get",
-        mock_get,
+        mock_get
     )
 
 
@@ -171,19 +175,25 @@ def test_aggregate_call_pc_pint_with_incidents(
     assert ret[0]["openqa"]["PUBLIC_CLOUD_IMAGE_ID"] == "Hola"
 
 
-def test_aggregate_call_sles4sap_pint_image(request_mock, incident_mock, monkeypatch):
-    def mockreturn(cloud_provider, pint_query, name_filter, region_list=None):
+@mock.patch('openqabot.types.aggregate.apply_sles4sap_pint_image')
+def test_aggregate_call_sles4sap_pint_image(mocked, request_mock, incident_mock):
+    def mockreturn(*args, **kwargs):
         return {"SLES4SAP_QESAP_OS_VER": "Hola"}
 
-    monkeypatch.setattr(
-        "openqabot.types.aggregate.apply_sles4sap_pint_image",
-        mockreturn,
-    )
+    mocked.side_effect = mockreturn
     my_config = {}
-    my_config["FLAVOR"] = None
+    my_config["FLAVOR"] = 'Azure-SAP-BYOS-Incidents-saptune'
     my_config["archs"] = ["ciao"]
     my_config["test_issues"] = {"AAAAAAA": "BBBBBBBBB:CCCCCCCC"}
-    my_settings = {"SLES4SAP_PINT_QUERY": None}
+    base_url = 'https://susepubliccloudinfo.suse.com/v1'
+    my_settings = {"SLES4SAP_PINT_QUERY": base_url}
+
+    # call the code
     acc = Aggregate("", settings=my_settings, config=my_config)
     ret = acc(incidents=[incident_mock(product="BBBBBBBBB", version="CCCCCCCC", arch="ciao")], token=None, ci_url=None)
-    assert ret == []
+
+    # Check that Aggregate class is able to use FLAVOR to calculate
+    # apply_sles4sap_pint_image first argument
+    mocked.assert_called_with('AZURE', base_url, '')
+    assert len(ret) == 1
+    assert ret[0]['openqa']['SLES4SAP_QESAP_OS_VER'] == 'Hola'

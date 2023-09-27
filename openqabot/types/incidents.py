@@ -94,9 +94,9 @@ class Incidents(BaseConf):
         DOWNLOAD_BASE = "http://download.suse.de/ibs/SUSE:/Maintenance:/"
         BASE_PRIO = 50
         ret = []
-
         for flavor, data in self.flavors.items():
             for arch in data["archs"]:
+                log.debug("Incidents:%s", incidents)
                 for inc in incidents:
                     if self.filter_embargoed() and inc.embargoed:
                         log.debug(
@@ -148,7 +148,8 @@ class Incidents(BaseConf):
                         full_post["openqa"]["REPOHASH"] = inc.revisions[
                             ArchVer(arch, self.settings["VERSION"])
                         ]
-                    except KeyError:
+                    except KeyError as e:
+                        log.info("KeyError:%s", e)
                         # in case incident has only unversioned SLE12 module
                         # ArchVer key will have (d.arch = arch, d.version = 12)
                         # but self.settings["VERSION"] can be any of ("12","12-SP1" ... "12-SP5")
@@ -177,6 +178,7 @@ class Incidents(BaseConf):
 
                     for issue, channel in data["issues"].items():
                         f_channel = Repos(channel.product, channel.version, arch)
+                        log.info("===> issue:%s channel:%s f_channel:%s inc.channels:%s", issue, channel, f_channel, inc.channels)
                         if f_channel in inc.channels:
                             issue_dict[issue] = inc
                             channels_set.add(f_channel)

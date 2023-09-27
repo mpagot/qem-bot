@@ -1,3 +1,4 @@
+from unittest import mock
 import re
 import responses
 from openqabot.pc_helper import (
@@ -89,75 +90,83 @@ def test_apply_publiccloud_pint_image(monkeypatch):
 
 
 def test_apply_sles4sap_pint_image_invalid_csp():
+    """
+    Test what happens providing an invalid CSP name:
+    Guybrush is still only a pirate and not one of the 3 valid CSP names
+    supported by the tested function.
+    """
     res = apply_sles4sap_pint_image(
-        cloud_provider="Guybrush", pint_query=None, name_filter=None
+        cloud_provider="Guybrush", pint_base_url=None, name_filter=None
     )
     assert res == {}
 
 
-def test_apply_sles4sap_pint_image_invalid_url(monkeypatch):
+def test_apply_sles4sap_pint_image_invalid_url():
+    """
+    pint_query has to be a valid url, otherwise the call silently return nothing
+    """
     res = apply_sles4sap_pint_image(
-        cloud_provider="AZURE", pint_query="DinkyIsland", name_filter=None
+        cloud_provider="AZURE", pint_base_url="DinkyIsland", name_filter=None
     )
     assert res == {}
 
 
-def test_apply_sles4sap_pint_image_none_match_pint(monkeypatch):
-    monkeypatch.setattr(
-        openqabot.pc_helper, "pint_query", lambda *args, **kwargs: {"images": []}
-    )
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_none_match_pint(pch):
+    """
+    Test PINT returning an empty image list
+    """
+    # this one simulate a PINT query that return nothing
+    pch.side_effect = lambda *args, **kwargs: {"images": []}
+
     res = apply_sles4sap_pint_image(
         cloud_provider="AZURE",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="StanStanman",
     )
     assert res == {}
 
 
-def test_apply_sles4sap_pint_image_unexpected_format(monkeypatch):
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_unexpected_format(pch):
     """
-    What is happening when the JSON structure returned
-    by PINT does not have fields that the script expect to be
-    present in Azure images?
+    When the JSON structure returned by PINT
+    does not contain fields that the script expect to be present
+    the function silently return an empty {}
     """
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {"images": [{"Elaine": "Marley"}]},
-    )
+    pch.side_effect = lambda *args, **kwargs: {"images": [{"Elaine": "Marley"}]}
     res = apply_sles4sap_pint_image(
         cloud_provider="AZURE",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="StanStanman",
     )
     assert res == {}
 
 
-def test_apply_sles4sap_pint_image_none_match_name(monkeypatch):
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_none_match_name(pch):
     """
     What is happening when the JSON structure returned
     by PINT does not have the name matching with requested filter?
     """
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [{"name": "ElaineMarley", "urn": "TriIslandArea"}]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
         cloud_provider="AZURE",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="StanStanman",
     )
     assert res == {}
 
 
-def test_apply_sles4sap_pint_image_azure(monkeypatch):
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_azure(pch):
+    """
+    Pint return a valid list of images, made of only one image
+    matching the name_filter
+    """
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [
                 {
                     "name": "ElaineMarley",
@@ -166,19 +175,144 @@ def test_apply_sles4sap_pint_image_azure(monkeypatch):
                     "state": "active",
                 }
             ]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
-        cloud_provider="AZURE", pint_query="http://DinkyIsland/", name_filter="Elaine"
+        cloud_provider="AZURE", pint_base_url="http://DinkyIsland", name_filter="Elaine"
     )
     assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandArea"
 
 
-def test_apply_sles4sap_pint_image_gce(monkeypatch):
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_azure_url(pch):
+    """
+    Check how the PINT url is internally composed.
+    Implicitly also test that the code at first look for in
+    active images.
+    """
+    pch.side_effect = lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "urn": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        }
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_base_url="http://DinkyIsland", name_filter="Elaine"
+    )
+    pch.assert_called_with('http://DinkyIsland/microsoft/images/active.json')
+
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_azure_url_inactive(pch):
+    """
+    Check how the PINT url is internally composed.
+    Implicitly also test that the code looks for in
+    inactive images.
+    """
+
+    # Simulate pint_query and return different values
+    # in case active or inactive images are requested
+    # Intentionally only the inactive image will match
+    # the name_filter
+    def im_pint(*args, **kwargs):
+        if '/active.json' in str(*args):
+            return {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "urn": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        }
+        return {"images": [
+                {
+                    "name": "StanStanman",
+                    "urn": "PlunderIsland",
+                    "publishedon": "1",
+                    "state": "inactive",
+                }
+            ]
+        }
+
+    pch.side_effect = im_pint
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_base_url="http://DinkyIsland", name_filter="StanStanman"
+    )
+    pch.assert_any_call('http://DinkyIsland/microsoft/images/active.json')
+    pch.assert_any_call('http://DinkyIsland/microsoft/images/inactive.json')
+    assert res["SLES4SAP_QESAP_OS_VER"] == "PlunderIsland"
+    assert res["SLES4SAP_QESAP_OS_STATE"] == "inactive"
+
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_azure_match_in_the_middle(pch):
+    """
+    Pint return a valid list of images, made of only one image
+    matching the name_filter, but the regexp has to be more articulated
+    to match in the middle.
+    Test that name_filter argument is supporting various regexp
+    """
+    pch.side_effect = lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "urn": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        }
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_base_url="http://DinkyIsland", name_filter=".*ineMa.*"
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandArea"
+
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_azure_newer(pch):
+    """
+    2 over 3 images from PINT match the name_filter.
+    The function has to return the newer on using publishedon
+    """
+    pch.side_effect = lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarleyJounger",
+                    "urn": "TriIslandAreaOld",
+                    "publishedon": "1",
+                    "state": "active",
+                },
+                {
+                    "name": "ElaineMarleyOlder",
+                    "urn": "TriIslandAreaNow",
+                    "publishedon": "2",
+                    "state": "active",
+                },
+                {
+                    "name": "VoodoLady",
+                    "urn": "Cave",
+                    "publishedon": "3",
+                    "state": "active",
+                }
+            ]
+        }
+    res = apply_sles4sap_pint_image(
+        cloud_provider="AZURE", pint_base_url="http://DinkyIsland", name_filter="ElaineMarley.*"
+    )
+    assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandAreaNow"
+
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_gce(pch):
+    """
+    Test equivalent to test_apply_sles4sap_pint_image_azure but for Google
+    """
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [
                 {
                     "name": "ElaineMarley",
@@ -187,23 +321,41 @@ def test_apply_sles4sap_pint_image_gce(monkeypatch):
                     "state": "active",
                 }
             ]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
-        cloud_provider="GCE", pint_query="http://DinkyIsland/", name_filter="Elaine"
+        cloud_provider="GCE", pint_base_url="http://DinkyIsland", name_filter="Elaine"
     )
     assert res["SLES4SAP_QESAP_OS_VER"] == "TriIslandArea/ElaineMarley"
 
 
-def test_apply_sles4sap_pint_image_ec2(monkeypatch):
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_gce_url(pch):
+    """
+    Test equivalent to test_apply_sles4sap_pint_image_azure_url but for Google
+    """
+    pch.side_effect = lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "project": "TriIslandArea",
+                    "publishedon": "1",
+                    "state": "active",
+                }
+            ]
+        }
+    res = apply_sles4sap_pint_image(
+        cloud_provider="GCE", pint_base_url="http://DinkyIsland", name_filter="Elaine"
+    )
+    pch.assert_called_with('http://DinkyIsland/google/images/active.json')
+
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_ec2(pch):
     """
     Simulate PINT only to have one active image in one region.
     Request images using matching name and region
     """
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [
                 {
                     "name": "ElaineMarley",
@@ -213,28 +365,50 @@ def test_apply_sles4sap_pint_image_ec2(monkeypatch):
                     "region": "TriIslandArea",
                 }
             ]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
         cloud_provider="EC2",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="Elaine",
         region_list=["TriIslandArea"],
     )
     assert res["SLES4SAP_QESAP_OS_VER"] == "ElaineMarley"
 
 
-def test_apply_sles4sap_pint_image_ec2_multiple_regions(monkeypatch):
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_ec2_url(pch):
+    """
+    Test equivalent to test_apply_sles4sap_pint_image_azure_url but for Amazon
+    """
+    pch.side_effect = lambda *args, **kwargs: {
+            "images": [
+                {
+                    "name": "ElaineMarley",
+                    "id": "RootBeer",
+                    "publishedon": "1",
+                    "state": "active",
+                    "region": "TriIslandArea",
+                }
+            ]
+        }
+    res = apply_sles4sap_pint_image(
+        cloud_provider="EC2",
+        pint_base_url="http://DinkyIsland",
+        name_filter="Elaine",
+        region_list=["TriIslandArea"],
+    )
+    pch.assert_called_with('http://DinkyIsland/amazon/images/active.json')
+
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_ec2_multiple_regions(pch):
     """
     Simulate PINT to have same image in two regions.
-    In AWS it is tipical to have same image available in multiple regions: all of the image
+    In AWS it is typical to have same image available in multiple regions: all of the image
     has the same name but different AMI (recorded in PINT under 'id' key)
     Request images using matching name and region list
     """
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [
                 {
                     "name": "ElaineMarley",
@@ -251,11 +425,10 @@ def test_apply_sles4sap_pint_image_ec2_multiple_regions(monkeypatch):
                     "region": "HookIsle",
                 },
             ]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
         cloud_provider="EC2",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="Elaine",
         region_list=["MêléeIsland", "HookIsle"],
     )
@@ -264,16 +437,14 @@ def test_apply_sles4sap_pint_image_ec2_multiple_regions(monkeypatch):
     assert res["SLES4SAP_QESAP_OS_VER_ID"] == "RootBeer;BananaPicker"
 
 
-def test_apply_sles4sap_pint_image_ec2_multiple_regions_filtered(monkeypatch):
+@mock.patch('openqabot.pc_helper.pint_query')
+def test_apply_sles4sap_pint_image_ec2_multiple_regions_filtered(pch):
     """
     Simulate PINT to have same image in two regions AAA and BBB.
     Request images using matching name but region list like AAA and CCC.
     Expected result is that only AAA image is returned
     """
-    monkeypatch.setattr(
-        openqabot.pc_helper,
-        "pint_query",
-        lambda *args, **kwargs: {
+    pch.side_effect = lambda *args, **kwargs: {
             "images": [
                 {
                     "name": "ElaineMarley",
@@ -290,11 +461,10 @@ def test_apply_sles4sap_pint_image_ec2_multiple_regions_filtered(monkeypatch):
                     "region": "HookIsle",
                 },
             ]
-        },
-    )
+        }
     res = apply_sles4sap_pint_image(
         cloud_provider="EC2",
-        pint_query="http://DinkyIsland/",
+        pint_base_url="http://DinkyIsland",
         name_filter="Elaine",
         region_list=["MêléeIsland", "MonkeyIsland"],
     )

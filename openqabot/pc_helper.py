@@ -114,14 +114,13 @@ def get_pint_image(name_filter, field, state, query, region=None):
         log.debug("Pint url:%s name_filter:%s region:%s", url, name_filter, region)
         images = pint_query(url)["images"]
         image = get_recent_pint_image(images, name_filter, region=region, state=state)
-        log.debug("image:%s", image)
         if image is None:
             raise ValueError(
                 f"Cannot find matching image in PINT with name:[{name_filter}] and state:{state}"
             )
         if field not in image.keys() or "name" not in image.keys():
             raise ValueError(
-                f"Cannot find expected keys in the selected image dictionary"
+                f"Cannot find expected keys in the selected image dictionary {image}"
             )
         settings["ID"] = image[field]
         settings["NAME"] = image["name"]
@@ -131,13 +130,19 @@ def get_pint_image(name_filter, field, state, query, region=None):
     return settings
 
 
-def sles4sap_pint_azure(name_filter, state, pint_query):
+def pint_url(pint_base_url, csp_name):
+    url = '/'.join([pint_base_url] + [csp_name, 'images']) + '/'
+    log.debug("PINT url:%s", url)
+    return url
+
+
+def sles4sap_pint_azure(name_filter, state, pint_base_url):
     """
     Query PINT about Azure images and retrieve the latest one
     """
     job_settings = {}
     ret = get_pint_image(
-        name_filter=name_filter, field="urn", state=state, query=pint_query
+        name_filter=name_filter, field="urn", state=state, query=pint_url(pint_base_url, "microsoft")
     )
     if any(ret):
         job_settings["SLES4SAP_QESAP_OS_VER"] = ret["ID"]
@@ -145,7 +150,7 @@ def sles4sap_pint_azure(name_filter, state, pint_query):
     return job_settings
 
 
-def sles4sap_pint_gce(name_filter, state, pint_query):
+def sles4sap_pint_gce(name_filter, state, pint_base_url):
     """
     Query PINT about GCE images and retrieve the latest one
     """
@@ -154,7 +159,7 @@ def sles4sap_pint_gce(name_filter, state, pint_query):
         name_filter=name_filter,
         field="project",
         state=state,
-        query=pint_query,
+        query=pint_url(pint_base_url, "google"),
     )
     if any(ret):
         job_settings["SLES4SAP_QESAP_OS_VER"] = f"{ret['ID']}/{ret['NAME']}"
@@ -162,7 +167,7 @@ def sles4sap_pint_gce(name_filter, state, pint_query):
     return job_settings
 
 
-def sles4sap_pint_ec2(name_filter, state, pint_query, region_list):
+def sles4sap_pint_ec2(name_filter, state, pint_base_url, region_list):
     """
     Query PINT about EC2 images and retrieve the latest one
     for each of the requested regions.
@@ -176,7 +181,7 @@ def sles4sap_pint_ec2(name_filter, state, pint_query, region_list):
             name_filter=name_filter,
             field="id",
             state=state,
-            query=pint_query,
+            query=pint_url(pint_base_url, "amazon"),
             region=this_region,
         )
         if any(ret):
@@ -200,7 +205,7 @@ def sles4sap_pint_ec2(name_filter, state, pint_query, region_list):
 
 
 def apply_sles4sap_pint_image(
-    cloud_provider, pint_query, name_filter, region_list=None
+    cloud_provider, pint_base_url, name_filter, region_list=None
 ):
     """
     Applies OS_IMAGE relates settings based on the given SLES4SAP_IMAGE_REGEX
@@ -208,17 +213,30 @@ def apply_sles4sap_pint_image(
     job_settings = {}
     for state in ["active", "inactive"]:
         if "AZURE" in cloud_provider:
-            job_settings = sles4sap_pint_azure(name_filter, state, pint_query)
+            job_settings = sles4sap_pint_azure(name_filter, state, pint_base_url)
         elif "GCE" in cloud_provider:
-            job_settings = sles4sap_pint_gce(name_filter, state, pint_query)
+            job_settings = sles4sap_pint_gce(name_filter, state, pint_base_url)
         elif "EC2" in cloud_provider:
             job_settings = sles4sap_pint_ec2(
-                name_filter, state, pint_query, region_list
+                name_filter, state, pint_base_url, region_list
             )
         if any(job_settings):
             break
     log.debug("Sles4sap job settings:%s", job_settings)
     return job_settings
+
+
+def sles4sap_query_flavor(flavor, base_url, version):
+    log.info("Flavor:%s", flavor)
+    pc_cloud_provider = None
+    if 'azure' in flavor.lower():
+        pc_cloud_provider = "AZURE"
+        pint_cloud_provider = "microsoft"
+    if not pc_cloud_provider:
+        return None
+    url = '/'.join([base_url] + [pint_cloud_provider, 'images']) + '/'
+    log.info("url:%s", url)
+    return apply_sles4sap_pint_image(pc_cloud_provider, url, version.lower())
 
 
 def get_recent_pint_image(images, name_regex, region=None, state="active"):

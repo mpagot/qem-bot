@@ -187,8 +187,12 @@ class Aggregate(BaseConf):
 
             # parse SLES4SAP pint query if present
             if "SLES4SAP_PINT_QUERY" in settings:
-                settings = apply_sles4sap_pint_image("", "", "")
-                if not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
+                cloud_provider = ""
+                if 'azure' in self.flavor.lower():
+                    cloud_provider = "AZURE"
+                settings = apply_sles4sap_pint_image(cloud_provider, settings["SLES4SAP_PINT_QUERY"], "")
+                if not settings.get("SLES4SAP_QESAP_OS_VER", False):
+                    log.debug("6666666666666666  settings:%s", settings)
                     continue
             log.debug("5555555555555555555555 settings:%s", settings)
 
