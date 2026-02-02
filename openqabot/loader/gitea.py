@@ -26,6 +26,7 @@ from osc.connection import http_GET
 from osc.core import MultibuildFlavorResolver
 
 from openqabot.config import GIT_REVIEW_BOT, GITEA, OBS_DOWNLOAD_URL, OBS_GROUP, OBS_PRODUCTS, OBS_REPO_TYPE, OBS_URL
+from openqabot.types.types import ProdVer
 from openqabot.utils import retry10 as retried_requests
 
 if TYPE_CHECKING:
@@ -119,29 +120,6 @@ def get_product_name_and_version_from_scmsync(scmsync_url: str) -> tuple[str, st
     return (m.group(1), m.group(2)) if m else ("", "")
 
 
-def compute_repo_url(
-    base: str,
-    product_name: str,
-    repo: tuple[str, ...],
-    arch: str,
-    path: str = "repodata/repomd.xml",
-) -> str:
-    """Construct the repository URL for a Gitea submission."""
-    # return codestream repo if product name is empty
-    start = f"{base}/{repo[0].replace(':', ':/')}:/{repo[1].replace(':', ':/')}/{OBS_REPO_TYPE}"
-    # for empty product assign something like `http://download.suse.de/ibs/SUSE:/SLFO:/1.1.99:/PullRequest:/166/standard/repodata/repomd.xml`
-    # otherwise return product repo for specified product
-    # assing something like `https://download.suse.de/ibs/SUSE:/SLFO:/1.1.99:/PullRequest:/166:/SLES/product/repo/SLES-15.99-x86_64/repodata/repomd.xml`
-    if not product_name:
-        return f"{start}/{path}"
-
-    msg = f"Product version must be provided for {product_name}"
-    if len(repo) <= 2 or not repo[2]:  # noqa: PLR2004
-        raise ValueError(msg)
-    product_version = repo[2]
-    return f"{start}/repo/{product_name}-{product_version}-{arch}/{path}"
-
-
 def compute_repo_url_for_job_setting(
     base: str,
     repo: Repos,
@@ -152,8 +130,8 @@ def compute_repo_url_for_job_setting(
     product_names = get_product_name(repo.version) if product_repo is None else product_repo
     product_version = repo.product_version if product_version is None else product_version
     product_list = product_names if isinstance(product_names, list) else [product_names]
-    repo_tuple = (repo.product, repo.version, product_version)
-    return ",".join(compute_repo_url(base, p, repo_tuple, repo.arch, "") for p in product_list)
+    prodver = ProdVer(repo.product, repo.version, product_version or "")
+    return ",".join(prodver.compute_url(base, p, repo.arch, "") for p in product_list)
 
 
 def get_open_prs(token: dict[str, str], repo: str, *, dry: bool, number: int | None) -> list[Any]:

@@ -14,6 +14,7 @@ from requests.exceptions import RetryError
 
 from openqabot.config import OBS_DOWNLOAD_URL
 from openqabot.errors import NoRepoFoundError
+from openqabot.types.types import ProdVer, Repos
 from openqabot.utils import retry5 as retried_requests
 
 from . import gitea
@@ -33,7 +34,7 @@ class RepoOptions(NamedTuple):
 
 
 def get_max_revision(
-    repos: Sequence[tuple[str, ...]],
+    repos: Sequence[Repos],
     arch: str,
     project: str,
     options: RepoOptions | None = None,
@@ -52,18 +53,17 @@ def get_max_revision(
     for repo in repos:
         # handle URLs for SLFO specifically
         if project == "SLFO":
-            repo_tuple = repo
-            if options.product_version is not None:
-                repo_tuple = (repo[0], repo[1], options.product_version)
-            url = gitea.compute_repo_url(
-                OBS_DOWNLOAD_URL, options.product_name or gitea.get_product_name(repo[1]), repo_tuple, arch
+            p_ver = options.product_version or repo.product_version
+            prodver = ProdVer(product=repo.product, version=repo.version, product_version=p_ver)
+            url = prodver.compute_url(
+                OBS_DOWNLOAD_URL, options.product_name or gitea.get_product_name(repo.version), arch
             )
-            log.debug("Computing RepoHash for %s from %s", repo[1], url)
+            log.debug("Computing RepoHash for %s from %s", repo.version, url)
         # openSUSE and SLE submissions have different handling of architecture
-        elif repo[0].startswith("openSUSE"):
-            url = f"{url_base}/SUSE_Updates_{repo[0]}_{repo[1]}/repodata/repomd.xml"
+        elif repo.product.startswith("openSUSE"):
+            url = f"{url_base}/SUSE_Updates_{repo.product}_{repo.version}/repodata/repomd.xml"
         else:
-            url = f"{url_base}/SUSE_Updates_{repo[0]}_{repo[1]}_{arch}/repodata/repomd.xml"
+            url = f"{url_base}/SUSE_Updates_{repo.product}_{repo.version}_{arch}/repodata/repomd.xml"
 
         try:
             req = retried_requests.get(url)

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from logging import getLogger
-from typing import Any
+from typing import Any, cast
 
 from openqabot.config import DEFAULT_SUBMISSION_TYPE, OBS_PRODUCTS
 from openqabot.errors import EmptyChannelsError, EmptyPackagesError, NoRepoFoundError
@@ -83,7 +83,7 @@ class Submission:
         if not self.channels:
             raise EmptyChannelsError(self.project)
 
-        self.packages: list[str] = sorted(submission["packages"], key=len)  # type: ignore[assignment]
+        self.packages: list[str] = cast("list[str]", sorted(submission["packages"], key=len))
         if not self.packages:
             raise EmptyPackagesError(self.project)
 
@@ -174,7 +174,7 @@ class Submission:
     ) -> dict[ArchVer, int]:
         """Calculate repohashes for a set of channels."""
         rev: dict[ArchVer, int] = {}
-        tmpdict: dict[ArchVer, list[tuple[str, str, str]]] = defaultdict(list)
+        tmpdict: dict[ArchVer, list[Repos]] = defaultdict(list)
 
         for repo in channels:
             if limit_archs and repo.arch not in limit_archs:
@@ -188,7 +188,7 @@ class Submission:
             if options.product_version and ver != options.product_version:
                 continue
 
-            tmpdict[ArchVer(repo.arch, ver)].append((repo.product, repo.version, repo.product_version))
+            tmpdict[ArchVer(repo.arch, ver)].append(repo)
 
         for archver, lrepos in tmpdict.items():
             repos_to_check = lrepos

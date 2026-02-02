@@ -17,6 +17,7 @@ import openqabot.loader.repohash as rp
 import responses
 from openqabot.errors import NoRepoFoundError
 from openqabot.loader.repohash import RepoOptions
+from openqabot.types.types import Repos
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -29,8 +30,8 @@ SLES_URL = "http://download.suse.de/ibs/SUSE:/Maintenance:/12345/SUSE_Updates_SL
 
 @responses.activate
 def test_get_max_revision_manager_aarch64() -> None:
-    repos = [("SLE-Module-SUSE-Manager-Server", "4.1")]
     arch = "aarch64"
+    repos = [Repos("SLE-Module-SUSE-Manager-Server", "4.1", arch)]
 
     with pytest.raises(NoRepoFoundError):
         rp.get_max_revision(repos, arch, PROJECT)
@@ -38,8 +39,8 @@ def test_get_max_revision_manager_aarch64() -> None:
 
 @responses.activate
 def test_get_max_revision_opensuse() -> None:
-    repos = [("openSUSE-SLE", "4.1")]
     arch = "aarch64"
+    repos = [Repos("openSUSE-SLE", "4.1", arch)]
     opensuse = BASE_XML % "256"
     url = "http://download.suse.de/ibs/SUSE:/Maintenance:/12345/SUSE_Updates_openSUSE-SLE_4.1/repodata/repomd.xml"
     responses.add(responses.GET, url=url, body=opensuse)
@@ -47,8 +48,8 @@ def test_get_max_revision_opensuse() -> None:
     assert ret == 256
 
 
-repos = [("SLES", "15SP3"), ("SLED", "15SP3")]
 arch = "x86_64"
+repos = [Repos("SLES", "15SP3", arch), Repos("SLED", "15SP3", arch)]
 
 
 def add_sles_sled_response(
@@ -121,8 +122,7 @@ def test_get_max_revision_exception(caplog: pytest.LogCaptureFixture) -> None:
 @responses.activate
 def test_get_max_revision_retry_error(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="bot.loader.repohash")
-    repos = [("SLES", "15SP3")]
-    arch = "x86_64"
+    repos = [Repos("SLES", "15SP3", arch)]
     project = "SUSE:Maintenance:12345"
     responses.add(responses.GET, url=SLES_URL, body=requests.exceptions.RetryError("Max retries exceeded"))
 
@@ -133,8 +133,7 @@ def test_get_max_revision_retry_error(caplog: pytest.LogCaptureFixture) -> None:
 @responses.activate
 def test_get_max_revision_not_ok(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="bot.loader.repohash")
-    repos = [("SLES", "15SP3")]
-    arch = "x86_64"
+    repos = [Repos("SLES", "15SP3", arch)]
     project = "SUSE:Maintenance:12345"
     responses.add(responses.GET, url=SLES_URL, status=404)
 
@@ -145,8 +144,7 @@ def test_get_max_revision_not_ok(caplog: pytest.LogCaptureFixture) -> None:
 @responses.activate
 def test_get_max_revision_with_submission_id_not_ok(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="bot.loader.repohash")
-    repos = [("SLES", "15SP3")]
-    arch = "x86_64"
+    repos = [Repos("SLES", "15SP3", arch)]
     project = "SUSE:Maintenance:12345"
     opts = RepoOptions(submission_id="git:1461")
     responses.add(responses.GET, url=SLES_URL, status=404)
@@ -162,29 +160,45 @@ def test_merge_repohash() -> None:
 
 @responses.activate
 def test_get_max_revision_slfo(mocker: MockerFixture) -> None:
-    repos = [("SLFO-Module", "1.1.99")]
-    arch = "x86_64"
+    repos = [Repos("SLFO-Module", "1.1.99", arch)]
     project = "SLFO"
     product_version = "15.99"
 
     mocker.patch("openqabot.loader.repohash.gitea.get_product_name", return_value="SLES")
     url = "http://download.suse.de/ibs/SLFO/repo/repodata/repomd.xml"
-    mock_compute_url = mocker.patch("openqabot.loader.repohash.gitea.compute_repo_url", return_value=url)
+    mock_compute_url = mocker.patch("openqabot.loader.repohash.ProdVer.compute_url", return_value=url)
     responses.add(responses.GET, url=url, body=BASE_XML % "123")
 
     # Call with product_version
     opts = RepoOptions(product_version=product_version)
     ret = rp.get_max_revision(repos, arch, project, options=opts)
     assert ret == 123
-    mock_compute_url.assert_called_with(ANY, "SLES", ("SLFO-Module", "1.1.99", product_version), arch)
+    mock_compute_url.assert_called_with(ANY, "SLES", arch)
 
     # Call without product_version
     ret = rp.get_max_revision(repos, arch, project)
     assert ret == 123
-    mock_compute_url.assert_called_with(ANY, "SLES", ("SLFO-Module", "1.1.99"), arch)
+    mock_compute_url.assert_called_with(ANY, "SLES", arch)
 
     # Call with product_name set
     opts = RepoOptions(product_name="SLES")
     ret = rp.get_max_revision(repos, arch, project, options=opts)
     assert ret == 123
-    mock_compute_url.assert_called_with(ANY, "SLES", ("SLFO-Module", "1.1.99"), arch)
+    mock_compute_url.assert_called_with(ANY, "SLES", arch)
+
+
+@responses.activate
+def test_get_max_revision_slfo_with_repo_version(mocker: MockerFixture) -> None:
+    # repo with 4 elements: (product, version, arch, product_version)
+    repos = [Repos("SLFO-Module", "1.1.99", arch, "15.99")]
+    project = "SLFO"
+
+    mocker.patch("openqabot.loader.repohash.gitea.get_product_name", return_value="SLES")
+    url = "http://download.suse.de/ibs/SLFO/repo/repodata/repomd.xml"
+    mock_compute_url = mocker.patch("openqabot.loader.repohash.ProdVer.compute_url", return_value=url)
+    responses.add(responses.GET, url=url, body=BASE_XML % "456")
+
+    # Call without product_version in options, should take it from repo.product_version
+    ret = rp.get_max_revision(repos, arch, project)
+    assert ret == 456
+    mock_compute_url.assert_called_with(ANY, "SLES", arch)

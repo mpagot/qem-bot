@@ -21,7 +21,6 @@ from openqabot.giteasync import GiteaSync
 from openqabot.loader.gitea import (
     add_build_results,
     add_packages_from_files,
-    compute_repo_url,
     compute_repo_url_for_job_setting,
     get_product_name,
     get_product_name_and_version_from_scmsync,
@@ -30,7 +29,7 @@ from openqabot.loader.gitea import (
     read_xml,
     review_pr,
 )
-from openqabot.types.types import Repos
+from openqabot.types.types import ProdVer, Repos
 from responses import GET, matchers
 
 if TYPE_CHECKING:
@@ -296,8 +295,8 @@ def test_computing_repo_url() -> None:
 
 
 def test_computing_repo_url_empty_product() -> None:
-    repo = ("product", "1.2")
-    url = compute_repo_url("base", "", repo, "x86_64")
+    repo = ProdVer("product", "1.2")
+    url = repo.compute_url("base", "", "x86_64")
     assert url == "base/product:/1.2/product/repodata/repomd.xml"
 
 
