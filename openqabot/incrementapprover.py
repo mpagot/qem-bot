@@ -75,7 +75,11 @@ class IncrementApprover:
         for jobid in jobids:
             self.unique_jobid_request_pair.setdefault(jobid, request.reqid)
             if self.unique_jobid_request_pair[jobid] != request.reqid:
-                raise AmbiguousApprovalStatusError
+                msg = (
+                    f"Job ID {jobid} already used for request "
+                    f"{self.unique_jobid_request_pair[jobid]}, but now requested for {request.reqid}"
+                )
+                raise AmbiguousApprovalStatusError(msg)
 
     @staticmethod
     @lru_cache(maxsize=128)
@@ -101,6 +105,7 @@ class IncrementApprover:
                 "flavor": p["FLAVOR"],
                 "arch": p["ARCH"],
                 "build": p["BUILD"],
+                "product": p.get("PRODUCT"),
             }
             for p in params
         )
@@ -336,6 +341,7 @@ class IncrementApprover:
             "FLAVOR": build_info.flavor,
             "ARCH": build_info.arch,
             "BUILD": build_info.build,
+            "PRODUCT": build_info.product,
             "INCREMENT_REPO": config_inc.build_project_url(config.settings.download_base_url) + repo_sub_path,
             **OBSOLETE_PARAMS,
         }
@@ -464,7 +470,18 @@ class IncrementApprover:
     def __call__(self) -> int:
         """Run the increment approval process."""
         error_count = 0
+        single_request = (
+            osc.core.Request.from_api(config.settings.obs_url, self.args.request_id) if self.args.request_id else None
+        )
         for config_inc in self.config:
+            if single_request and single_request.actions[0].src_project != config_inc.build_project():
+                log.debug(
+                    "Skipping config %s as it does not match request %s project %s",
+                    config_inc.build_project(),
+                    self.args.request_id,
+                    single_request.actions[0].src_project,
+                )
+                continue
             request = find_request_on_obs(self.args, config_inc.build_project())
             error_count += self.process_request_for_config(request, config_inc)
         for request in self.requests_to_approve.values():
