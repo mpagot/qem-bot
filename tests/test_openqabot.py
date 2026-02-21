@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from typer.testing import CliRunner
 
 from openqabot.args import app
+from openqabot.args import main as args_main
 from openqabot.main import main
 
 if TYPE_CHECKING:
@@ -82,6 +84,7 @@ def test_main_exception(mocker: MockerFixture) -> None:
 
 def test_main_missing_token_exits(mocker: MockerFixture) -> None:
     # Use CliRunner to test main app execution with missing token
+    mock_load_dotenv = mocker.patch("openqabot.args.load_dotenv")
     # We must NOT provide --token and not have it in env
     mocker.patch.dict(os.environ, {}, clear=True)
     # Mock configs dir to be True to avoid unrelated Configuration error if it fails later
@@ -93,10 +96,12 @@ def test_main_missing_token_exits(mocker: MockerFixture) -> None:
         "Error: Missing option '--token' / '-t'." in result.stdout
         or "Error: Missing option '--token' / '-t'." in result.stderr
     )
+    assert mock_load_dotenv.called
 
 
 def test_main_help_no_token(mocker: MockerFixture) -> None:
     # Test that --help works even without token
+    mocker.patch("openqabot.args.load_dotenv")
     mocker.patch.dict(os.environ, {}, clear=True)
     mocker.patch("sys.argv", ["qem-bot", "--help"])
     result = runner.invoke(app, ["--help"])
@@ -106,8 +111,34 @@ def test_main_help_no_token(mocker: MockerFixture) -> None:
 
 def test_main_help_subcommand_no_token(mocker: MockerFixture) -> None:
     # Test that full-run --help works even without token
+    mocker.patch("openqabot.args.load_dotenv")
     mocker.patch.dict(os.environ, {}, clear=True)
     mocker.patch("sys.argv", ["qem-bot", "full-run", "--help"])
     result = runner.invoke(app, ["full-run", "--help"])
     assert result.exit_code == 0
     assert "Usage: " in result.stdout
+
+
+def test_main_missing_token_with_help_returns_early(mocker: MockerFixture) -> None:
+    # Use mocker to capture sys.exit and print
+    mock_load_dotenv = mocker.patch("openqabot.args.load_dotenv")
+    mock_exit = mocker.patch("sys.exit")
+    mock_print = mocker.patch("builtins.print")
+    # Ensure token is not in environment
+    mocker.patch.dict(os.environ, {}, clear=True)
+    # Mock sys.argv to simulate running with --help
+    mocker.patch("sys.argv", ["qem-bot.py", "--help"])
+
+    # We need to mock the context and its resilient_parsing attribute
+    mock_ctx = mocker.Mock()
+    mock_ctx.resilient_parsing = False
+    mock_ctx.help_option_names = ["--help", "-h"]
+
+    # Call the main callback directly
+    # It should return early because --help is in sys.argv
+    args_main(mock_ctx, configs=Path("/etc/openqabot"), token=None)
+
+    # It should NOT exit and NOT print error
+    assert not mock_exit.called
+    assert not mock_print.called
+    assert mock_load_dotenv.called

@@ -12,6 +12,7 @@ from typing import Annotated
 from urllib.parse import urlparse
 
 import typer
+from dotenv import load_dotenv
 
 import openqabot.config as config_module
 
@@ -46,35 +47,45 @@ def main(  # noqa: PLR0913
         typer.Option(
             "-c",
             "--configs",
+            envvar="QEM_BOT_CONFIGS",
             help="Directory or single file with openqabot configuration metadata",
             file_okay=True,
             dir_okay=True,
             readable=True,
         ),
     ] = Path("/etc/openqabot"),
-    dry: Annotated[bool, typer.Option("--dry", help="Dry run, do not post any data")] = False,
+    dry: Annotated[bool, typer.Option("--dry", envvar="QEM_BOT_DRY", help="Dry run, do not post any data")] = False,
     fake_data: Annotated[
         bool,
-        typer.Option("--fake-data", help="Use fake data, do not query data from real services"),
+        typer.Option(
+            "--fake-data",
+            envvar="QEM_BOT_FAKE_DATA",
+            help="Use fake data, do not query data from real services",
+        ),
     ] = False,
     dump_data: Annotated[
         bool,
-        typer.Option("--dump-data", help="Dump requested data for later use via --fake-data"),
+        typer.Option(
+            "--dump-data",
+            envvar="QEM_BOT_DUMP_DATA",
+            help="Dump requested data for later use via --fake-data",
+        ),
     ] = False,
-    debug: Annotated[bool, typer.Option("-d", "--debug", help="Enable debug output")] = False,
+    debug: Annotated[bool, typer.Option("-d", "--debug", envvar="QEM_BOT_DEBUG", help="Enable debug output")] = False,
     token: Annotated[
         str | None,
         typer.Option("-t", "--token", envvar="QEM_BOT_TOKEN", help="Token for qem dashboard api"),
     ] = None,
     gitea_token: Annotated[
         str | None,
-        typer.Option("-g", "--gitea-token", help="Token for Gitea api"),
+        typer.Option("-g", "--gitea-token", envvar="QEM_BOT_GITEA_TOKEN", help="Token for Gitea api"),
     ] = None,
     openqa_instance: Annotated[
         str,
         typer.Option(
             "-i",
             "--openqa-instance",
+            envvar="OPENQA_INSTANCE",
             help="The openQA instance to use\n Other instances than OSD do not update dashboard database",
         ),
     ] = "https://openqa.suse.de",
@@ -83,12 +94,14 @@ def main(  # noqa: PLR0913
         typer.Option(
             "-s",
             "--singlearch",
+            envvar="QEM_BOT_SINGLEARCH",
             help="Yaml config with list of singlearch packages for submissions run",
         ),
     ] = Path("/etc/openqabot/singlearch.yml"),
-    retry: Annotated[int, typer.Option("-r", "--retry", help="Number of retries")] = 2,
+    retry: Annotated[int, typer.Option("-r", "--retry", envvar="QEM_BOT_RETRY", help="Number of retries")] = 2,
 ) -> None:
     """QEM-Dashboard, SMELT, Gitea and openQA connector."""
+    load_dotenv()
     # Configure logging
     log_obj = create_logger("bot")
     if debug:
