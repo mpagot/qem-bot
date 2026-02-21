@@ -71,8 +71,9 @@ install dependencies:
 There are several Makefile targets available for development. Run `make help`
 to see a full list of available targets.
 
-There are currently only limited automatic tests available. Run `make test`
-or `pytest` to execute Python-based unit tests. Run e.g.
+### Automated local testing
+
+Run `make test` or `pytest` to execute Python-based unit tests. Run e.g.
 `pytest tests/test_amqp.py` to execute a single test.
 
 Run `make test-with-coverage` to check for 100% statement and branch coverage.
@@ -88,6 +89,9 @@ of metric is not about specific bad patterns but rather counts constructs like
 details. There is also
 [documentation about the thresholds](https://radon.readthedocs.io/en/latest/commandline.html#the-mi-command)
 for the grades.
+
+Run `make test-all-commands-unstable` to quickly verify that all bot subcommands
+can be parsed and executed (using `--dry` and `--fake-data`).
 
 Another simple way for at least syntax correctness checks is to just call
 `python3 ./qem-bot.py --help` to show the help text if the source can be
@@ -109,8 +113,25 @@ It is possible to run qem-bot inside a container, please see
 [docs/containers](containers.md).
 
 ### Local integration testing with qem-dashboard and openQA
-Check out [qem-dashboard](https://github.com/openSUSE/qem-dashboard) and follow
-the instructions from its README to set up. Then all you need to do to start
+
+To test the interaction between `qem-bot` and `qem-dashboard`, you can use the
+following automated targets:
+
+1.  **Start a local dashboard:** If you have a `qem-dashboard` checkout in the
+    neighboring directory (`../qem-dashboard`), you can start it with:
+    ```bash
+    make run-dashboard-local
+    ```
+2.  **Run integration tests:** To run a suite of sync and run commands against
+    a local dashboard (defaulting to `http://localhost:3000/`), use:
+    ```bash
+    make test-dashboard-integration
+    ```
+    This will verify `gitea-sync`, `smelt-sync`, and dry-runs of
+    `submissions-run` and `sub-approve`.
+
+For manual setup, check out [qem-dashboard](https://github.com/openSUSE/qem-dashboard)
+and follow the instructions from its README. Then all you need to do to start
 the dashboard is:
 
 ```

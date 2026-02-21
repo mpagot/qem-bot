@@ -73,14 +73,34 @@ test-with-coverage: only-test-with-coverage checkstyle ## Run tests with coverag
 
 BOT_COMMANDS ?= $(shell python3 -c "from openqabot.args import app; from typer.main import get_command_name; print(' '.join(get_command_name(c.name or c.callback.__name__) for c in app.registered_commands if not c.hidden))")
 TIMEOUT ?= 30
+QEM_DASHBOARD_URL ?= "http://localhost:3000/"
+GITEA_TOKEN_CMD ?= cat ./.gitea_token
+TEST_QEM_BOT_INTEGRATION_ARGS ?= -t s3cret -c metadata/qem-bot --singlearch metadata/qem-bot/singlearch.yml --gitea-token $$($(GITEA_TOKEN_CMD)) --retry 0
+TEST_QEM_BOT_INTEGRATION_EXTRA_ARGS ?=
+QEM_BOT_BASE_CMD = env QEM_DASHBOARD_URL=$(QEM_DASHBOARD_URL) python3 ./qem-bot.py $(TEST_QEM_BOT_INTEGRATION_ARGS) $(TEST_QEM_BOT_INTEGRATION_EXTRA_ARGS)
 
 .PHONY: test-all-commands-unstable
 test-all-commands-unstable: ## Test all bot commands with fake data
 	for i in $(BOT_COMMANDS); do \
 		echo "### $$i" && \
-		timeout --foreground $(TIMEOUT) $(UNSHARE) python3 ./qem-bot.py -t 1234 -c metadata/qem-bot --singlearch metadata/qem-bot/singlearch.yml --dry --fake-data $$i || \
+		timeout --foreground $(TIMEOUT) $(UNSHARE) $(QEM_BOT_BASE_CMD) --dry --fake-data $$i || \
 		{ ret=$$?; [ $$ret -eq 124 ] || [ $$ret -eq 0 ] || exit $$ret; }; \
 	done
+
+.PHONY: run-dashboard-local
+run-dashboard-local:  ## Run a qem-dashboard instance for testing from ../qem-dashboard (Needs to be checked out manually)
+	make -C ../qem-dashboard run-dashboard-local
+
+.PHONY: check_for_dashboard
+check_for_dashboard:  ## Check for a responsive qem-dashboard instance for testing
+	@curl -s -o /dev/null -w "%{http_code}\n" $(QEM_DASHBOARD_URL) || { echo "No responsive server found on $(QEM_DASHBOARD_URL). Make sure to start a qem-dashboard manually or with 'make run-dashboard-local'" ; exit 1; }
+
+.PHONY: test-dashboard-integration
+test-dashboard-integration: check_for_dashboard  ## Test qem-bot against a local dashboard instance
+	$(QEM_BOT_BASE_CMD) gitea-sync
+	$(QEM_BOT_BASE_CMD) smelt-sync
+	$(QEM_BOT_BASE_CMD) --dry submissions-run
+	$(QEM_BOT_BASE_CMD) --dry sub-approve
 
 .PHONY: setup-hooks
 setup-hooks: ## Install pre-commit git hooks
