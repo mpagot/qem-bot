@@ -11,7 +11,7 @@ from argparse import Namespace
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
 import osc.core
@@ -212,7 +212,12 @@ def prepare_approver(
         settings={} if config is None else config.settings,
         additional_builds=[] if config is None else config.additional_builds,
     )
-    return IncrementApprover(args)
+
+    with (
+        patch("osc.conf.get_config", side_effect=fake_osc_get_config),
+        patch("openqabot.config.settings.obs_url", "https://api.suse.de"),
+    ):
+        return IncrementApprover(args)
 
 
 def prepare_approver_with_additional_config(caplog: pytest.LogCaptureFixture) -> IncrementApprover:

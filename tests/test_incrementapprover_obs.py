@@ -7,13 +7,14 @@ from __future__ import annotations
 import logging
 from argparse import Namespace
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 from urllib.parse import urlparse
 
 import osc.core
 import pytest
 
 import responses
-from openqabot.config import BUILD_REGEX, OBS_GROUP, OBS_URL
+from openqabot.config import BUILD_REGEX, OBS_GROUP, settings
 from openqabot.incrementapprover import ApprovalStatus, IncrementApprover
 from openqabot.requests import find_request_on_obs, get_obs_request_list
 
@@ -35,7 +36,7 @@ def test_specified_obs_request_not_found_skips_approval(
     mocker: MockerFixture, caplog: pytest.LogCaptureFixture
 ) -> None:
     def fake_request_from_api(apiurl: str, reqid: int) -> None:
-        assert apiurl == OBS_URL
+        assert apiurl == settings.obs_url
         assert reqid == 43
 
     mocker.patch("osc.core.Request.from_api", side_effect=fake_request_from_api)
@@ -48,7 +49,7 @@ def test_specified_obs_request_not_found_skips_approval(
 @pytest.mark.usefixtures("fake_product_repo")
 def test_specified_obs_request_found_renders_request(mocker: MockerFixture, caplog: pytest.LogCaptureFixture) -> None:
     def fake_request_from_api(apiurl: str, reqid: int) -> osc.core.Request:
-        assert apiurl == OBS_URL
+        assert apiurl == settings.obs_url
         assert reqid == 43
         req = mocker.Mock(spec=osc.core.Request)
         req.reqid = 43
@@ -69,7 +70,7 @@ def test_specified_obs_request_found_renders_request(mocker: MockerFixture, capl
 @pytest.mark.usefixtures("fake_product_repo")
 def testfind_request_on_obs_with_request_id(mocker: MockerFixture, caplog: pytest.LogCaptureFixture) -> None:
     def fake_request_from_api(apiurl: str, reqid: int) -> osc.core.Request:
-        assert apiurl == OBS_URL
+        assert apiurl == settings.obs_url
         assert reqid == 43
         req = mocker.Mock(spec=osc.core.Request)
         req.reqid = 43
@@ -135,16 +136,19 @@ def testhandle_approval_dry(caplog: pytest.LogCaptureFixture, mocker: MockerFixt
         settings={},
         additional_builds=[],
     )
-    mocker.patch("osc.conf.get_config")
-    approver = IncrementApprover(args)
-    req = mocker.Mock(spec=osc.core.Request)
-    req.reqid = 123
-    status = ApprovalStatus(req, ok_jobs={1}, reasons_to_disapprove=[])
-    mock_osc_change = mocker.patch("osc.core.change_review_state")
+    with patch("osc.conf.get_config"), patch("openqabot.config.settings.obs_url", "https://api.suse.de"):
+        approver = IncrementApprover(args)
+        req = mocker.Mock(spec=osc.core.Request)
+        req.reqid = 123
+        status = ApprovalStatus(req, ok_jobs={1}, reasons_to_disapprove=[])
+        mock_osc_change = mocker.patch("osc.core.change_review_state")
 
-    approver.handle_approval(status)
-    mock_osc_change.assert_not_called()
-    assert "Approving OBS request ID '123': All 1 openQA jobs have passed/softfailed" in caplog.text
+        approver.handle_approval(status)
+        mock_osc_change.assert_not_called()
+        assert (
+            "Approving OBS request https://build.suse.de/request/show/123: All 1 openQA jobs have passed/softfailed"
+            in caplog.text
+        )
 
 
 def testapprove_on_obs_dry(caplog: pytest.LogCaptureFixture, mocker: MockerFixture) -> None:
@@ -163,7 +167,7 @@ def testhandle_approval_no_jobs_safeguard(caplog: pytest.LogCaptureFixture, mock
 
     approver.handle_approval(status)
     assert "No openQA jobs were found/checked for this request." in caplog.text
-    assert "Not approving OBS request ID '123' for the following reasons:" in caplog.text
+    assert "Not approving OBS request https://build.suse.de/request/show/123 for the following reasons:" in caplog.text
 
 
 @responses.activate

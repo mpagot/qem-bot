@@ -44,8 +44,11 @@ def _auto_clear_cache() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings() -> None:
-    config_module.settings = Settings()
+def _reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OBS_URL", "https://api.suse.de")
+    new_settings = Settings()
+    for key in type(new_settings).model_fields:
+        setattr(config_module.settings, key, getattr(new_settings, key))
 
 
 @pytest.fixture

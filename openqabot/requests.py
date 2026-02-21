@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import osc.core
 
-from openqabot.config import OBS_GROUP, OBS_URL
+from openqabot import config
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -21,14 +21,14 @@ log = getLogger("bot.requests")
 @cache
 def get_obs_request_list(project: str, req_state: tuple) -> list:
     """Get a list of requests from OBS."""
-    return osc.core.get_request_list(OBS_URL, project, req_state=req_state)
+    return osc.core.get_request_list(config.settings.obs_url, project, req_state=req_state)
 
 
 def find_request_in_project(project: str, relevant_states: list[str]) -> osc.core.Request | None:
     """Find a relevant OBS request within a project."""
     log.debug(
         "Checking for product increment requests to be reviewed by %s on %s",
-        OBS_GROUP,
+        config.settings.obs_group,
         project,
     )
     obs_requests = get_obs_request_list(project, tuple(relevant_states))
@@ -36,7 +36,7 @@ def find_request_in_project(project: str, relevant_states: list[str]) -> osc.cor
         request
         for request in sorted(obs_requests, reverse=True)
         for review in request.reviews
-        if review.by_group == OBS_GROUP and review.state in relevant_states
+        if review.by_group == config.settings.obs_group and review.state in relevant_states
     )
     return next(filtered_requests, None)
 
@@ -54,7 +54,7 @@ def _find_request_on_obs_cached(
         relevant_request = find_request_in_project(build_project, relevant_states)
     else:
         log.debug("Checking specified request %i", request_id)
-        relevant_request = osc.core.Request.from_api(OBS_URL, request_id)
+        relevant_request = osc.core.Request.from_api(config.settings.obs_url, request_id)
 
     if relevant_request is None:
         states_str = "/".join(relevant_states)

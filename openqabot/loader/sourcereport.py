@@ -12,7 +12,7 @@ from typing import Any
 import osc.core
 from lxml import etree  # type: ignore[unresolved-import]
 
-from openqabot.config import OBS_URL
+from openqabot import config
 from openqabot.repodiff import Package, RepoDiff
 from openqabot.types.types import OBSBinary
 
@@ -41,7 +41,7 @@ def parse_source_report(
     with tempfile.TemporaryDirectory() as tmpdirname:
         source_report_xml_path = f"{tmpdirname}/source-report-{binary.project}-{binary.repo}-{binary.arch}.xml"
         osc.core.get_binary_file(
-            OBS_URL,
+            config.settings.obs_url,
             prj=binary.project,
             package=binary.package,
             repo=binary.repo,
@@ -59,9 +59,10 @@ def parse_source_report(
 
 def find_source_reports(project: str, package: str) -> list[str]:
     """Find source reports for a package in a project."""
-    repos = osc.core.get_repos_of_project(OBS_URL, prj=project)
+    repos = osc.core.get_repos_of_project(config.settings.obs_url, prj=project)
     binaries = [
-        osc.core.get_binarylist(OBS_URL, prj=project, repo=repo.name, arch=repo.arch, package=package) for repo in repos
+        osc.core.get_binarylist(config.settings.obs_url, prj=project, repo=repo.name, arch=repo.arch, package=package)
+        for repo in repos
     ]
     return [b for binary_list in binaries for b in binary_list if b.endswith("Source.report")]
 

@@ -25,7 +25,7 @@ def test_no_approval_if_no_builds_found(caplog: pytest.LogCaptureFixture) -> Non
     responses.add(GET, obs_product_table_url, json={"data": []})
     approver = prepare_approver(caplog)
     approver()
-    assert "Not approving OBS request ID '42' for the following reasons:" in caplog.text
+    assert "Not approving OBS request https://build.suse.de/request/show/42 for the following reasons:" in caplog.text
     assert "No builds found for config" in caplog.text
 
 
@@ -48,9 +48,11 @@ def test_no_approval_if_one_of_two_configs_has_no_builds(caplog: pytest.LogCaptu
     approver.config.append(config2)
     approver()
 
-    approval_messages = [m for m in caplog.messages if "Approving OBS request ID '42'" in m]
+    approval_messages = [
+        m for m in caplog.messages if "Approving OBS request https://build.suse.de/request/show/42" in m
+    ]
     assert not approval_messages
-    assert "Not approving OBS request ID '42' for the following reasons:" in caplog.text
+    assert "Not approving OBS request https://build.suse.de/request/show/42 for the following reasons:" in caplog.text
     assert "No builds found for config sle (no settings) in OBS:PROJECT:TEST" in caplog.text
     assert "All 1 openQA jobs have passed/softfailed" not in caplog.text
 

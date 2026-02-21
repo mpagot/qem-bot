@@ -41,7 +41,10 @@ def fake_osc_request(mocker: MockerFixture) -> osc.core.Request:
 @pytest.mark.usefixtures("fake_ok_jobs", "fake_product_repo", "mock_osc")
 def test_approval_if_there_are_only_ok_openqa_jobs(mocker: MockerFixture, caplog: pytest.LogCaptureFixture) -> None:
     run_approver(mocker, caplog)
-    assert "Approving OBS request ID '42': All 2 openQA jobs have passed/softfailed" in caplog.messages[-1]
+    assert (
+        "Approving OBS request https://build.suse.de/request/show/42: All 2 openQA jobs have passed/softfailed"
+        in caplog.messages[-1]
+    )
 
 
 @responses.activate
@@ -84,7 +87,10 @@ def test_skipping_with_no_openqa_jobs_verifying_that_expected_scheduled_products
     expected_log_message += ".*SLESv16.0.*139.1-additional-build@x86_64.*Additional-Foo-Increments"
     assert re.search(expected_log_message, caplog.text)
     assert re.search(r"Skipping approval.*no relevant jobs.*SLESv16.0.*139.1@s390x.*Foo-Increments", caplog.text)
-    assert "Not approving OBS request ID '42' for the following reasons:" in caplog.messages[-1]
+    assert (
+        "Not approving OBS request https://build.suse.de/request/show/42 for the following reasons:"
+        in caplog.messages[-1]
+    )
 
 
 @responses.activate
@@ -100,7 +106,10 @@ def test_skipping_with_only_jobs_of_additional_builds_present(
 
     assert re.search(r"Skipping approval.*no relevant jobs.*SLESv16.0.*139.1@x86_64.*Online-Increments", caplog.text)
     assert re.search(r"Skipping approval.*no relevant jobs.*SLESv16.0.*139.1@ppc64le.*Foo-Increments", caplog.text)
-    assert "Not approving OBS request ID '42' for the following reasons:" in caplog.messages[-1]
+    assert (
+        "Not approving OBS request https://build.suse.de/request/show/42 for the following reasons:"
+        in caplog.messages[-1]
+    )
     assert re.search(R".*openQA jobs.*with result 'failed':\n - http://openqa-instance/tests/21", caplog.messages[-1])
 
 
@@ -191,7 +200,7 @@ def test_scheduling_extra_livepatching_builds_based_on_source_report(
     (errors, jobs) = run_approver(
         mocker, caplog, schedule=True, diff_project_suffix="source-report", config=next(configs)
     )
-    assert "Computing source report diff for OBS request ID 42" in caplog.messages
+    assert "Computing source report diff for OBS request https://build.suse.de/request/show/42" in caplog.messages
     assert_run_with_extra_livepatching(errors, jobs, caplog.messages)
 
 
@@ -248,14 +257,17 @@ def test_handle_approval_valid_request_id(caplog: pytest.LogCaptureFixture, fake
     approver = prepare_approver(caplog)
     status = ApprovalStatus(fake_osc_request, ok_jobs={1, 2}, reasons_to_disapprove=[])
     approver.handle_approval(status)
-    assert "Approving OBS request ID '42': All 2 openQA jobs have passed/softfailed" in caplog.text
+    assert (
+        "Approving OBS request https://build.suse.de/request/show/42: All 2 openQA jobs have passed/softfailed"
+        in caplog.text
+    )
 
 
 def test_handle_approval_disapprove(caplog: pytest.LogCaptureFixture, fake_osc_request: osc.core.Request) -> None:
     approver = prepare_approver(caplog)
     status = ApprovalStatus(fake_osc_request, ok_jobs=set(), reasons_to_disapprove=["failed jobs"])
     approver.handle_approval(status)
-    assert "Not approving OBS request ID '42' for the following reasons:" in caplog.text
+    assert "Not approving OBS request https://build.suse.de/request/show/42 for the following reasons:" in caplog.text
     assert "failed jobs" in caplog.text
 
 
@@ -335,12 +347,20 @@ def test_issue_194074_repro(
         increment_approver.config = [config_sl_micro, config_sles]
         increment_approver()
 
-    log_399766 = [m for m in caplog.messages if "OBS request ID '399766'" in m and "Not approving" in m]
+    log_399766 = [
+        m
+        for m in caplog.messages
+        if "OBS request https://build.suse.de/request/show/399766" in m and "Not approving" in m
+    ]
     assert len(log_399766) == 1
     assert "20724745" in log_399766[0]
     assert "20753853" not in log_399766[0]
 
-    log_399799 = [m for m in caplog.messages if "OBS request ID '399799'" in m and "Not approving" in m]
+    log_399799 = [
+        m
+        for m in caplog.messages
+        if "OBS request https://build.suse.de/request/show/399799" in m and "Not approving" in m
+    ]
     assert len(log_399799) == 1
     assert "20753853" in log_399799[0]
     assert "20724745" not in log_399799[0]
@@ -369,7 +389,10 @@ def test_issue_194074_specific_request(
         increment_approver()
 
     assert "Found product increment request on SUSE:SLFO:Products:SL-Micro:6.2:ToTest: 399766" in caplog.messages
-    assert "Approving OBS request ID '399766': All 1 openQA jobs have passed/softfailed" in caplog.messages
+    assert (
+        "Approving OBS request https://build.suse.de/request/show/399766: All 1 openQA jobs have passed/softfailed"
+        in caplog.messages
+    )
     assert any(
         "Skipping config SUSE:SLFO:Products:SLES:16.0:TEST as it does not match request 399766" in m
         for m in caplog.messages
@@ -399,7 +422,10 @@ def test_issue_194074_specific_request_sles(
         increment_approver()
 
     assert "Found product increment request on SUSE:SLFO:Products:SLES:16.0:TEST: 399799" in caplog.messages
-    assert "Approving OBS request ID '399799': All 1 openQA jobs have passed/softfailed" in caplog.messages
+    assert (
+        "Approving OBS request https://build.suse.de/request/show/399799: All 1 openQA jobs have passed/softfailed"
+        in caplog.messages
+    )
     assert any(
         "Skipping config SUSE:SLFO:Products:SL-Micro:6.2:ToTest as it does not match request 399799" in m
         for m in caplog.messages

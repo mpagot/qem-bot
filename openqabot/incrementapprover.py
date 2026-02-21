@@ -168,7 +168,7 @@ class IncrementApprover:
         """Process approval or disapproval based on job results."""
         reasons_to_disapprove = approval_status.reasons_to_disapprove
         reqid = approval_status.request.reqid
-        id_msg = f"OBS request ID '{reqid}'"
+        id_msg = f"OBS request {config.settings.obs_web_url}/request/show/{reqid}"
 
         if len(reasons_to_disapprove) == 0 and len(approval_status.ok_jobs) == 0:
             reasons_to_disapprove.append("No openQA jobs were found/checked for this request.")
@@ -269,12 +269,13 @@ class IncrementApprover:
 
     def get_package_diff_from_source_report(self, request: osc.core.Request) -> defaultdict[str, set[Package]]:
         """Compute package diff using source reports."""
-        diff_key = "request:" + str(request.id)
+        diff_key = "request:" + str(request.reqid)
         package_diff = self.package_diff.get(diff_key)
         if package_diff is None:
-            log.info("Computing source report diff for OBS request ID %s", request.id)
+            id_url = f"{config.settings.obs_web_url}/request/show/{request.reqid}"
+            log.info("Computing source report diff for OBS request %s", id_url)
             package_diff = compute_packages_of_request_from_source_report(request)[0]
-            log.debug("Packages updated by OBS request ID %s: %s", request.id, pformat(package_diff))
+            log.debug("Packages updated by OBS request %s: %s", id_url, pformat(package_diff))
             self.package_diff[diff_key] = package_diff
         return package_diff
 
@@ -410,7 +411,12 @@ class IncrementApprover:
             return error_count
 
         info_str = "or".join([build_info.string_with_params(p) for p in params])
-        log.debug("Requesting openQA job results for OBS request ID '%s' for %s", request.reqid, info_str)
+        log.debug(
+            "Requesting openQA job results for OBS request %s/request/show/%s for %s",
+            config.settings.obs_web_url,
+            request.reqid,
+            info_str,
+        )
         res = self.request_openqa_job_results(params, info_str)
 
         if self.args.reschedule:
