@@ -2,15 +2,30 @@
 # SPDX-License-Identifier: MIT
 """Test loader config."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-from pytest_mock import MockerFixture
-from ruamel.yaml import YAMLError
+from ruamel.yaml import YAML, YAMLError
+from ruamel.yaml.constructor import ConstructorError, SafeConstructor
+from ruamel.yaml.nodes import SequenceNode
 
-from openqabot.loader.config import get_onearch, load_metadata, read_products
+from openqabot.loader.config import (
+    ConcatSafeConstructor,
+    concat_constructor,
+    get_onearch,
+    load_metadata,
+    read_products,
+)
 from openqabot.types.types import Data
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from pytest_mock import MockerFixture
 
 __root__ = Path(__file__).parent / "fixtures/config"
 
@@ -174,3 +189,93 @@ def test_read_products_yaml_error(caplog: pytest.LogCaptureFixture, mocker: Mock
     result = read_products(Path())
     assert result == []
     assert "YAML load failed: File invalid.yml" in caplog.text
+
+
+def test_concat_on_non_sequence_node_raises_clear_error() -> None:
+    loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
+    with pytest.raises(ConstructorError, match="expected a sequence node for !concat"):
+        loader.load("result: !concat scalar")
+
+
+def test_load_metadata_concat_simple_list() -> None:
+    loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
+    yaml_input = "result: !concat [ [a, b], [c, d] ]"
+    data = loader.load(yaml_input)
+    assert data["result"] == ["a", "b", "c", "d"]
+
+
+def test_load_metadata_concat_mixed_list_scalar() -> None:
+    loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
+    yaml_input = "result: !concat [ [a, b], scalar, [c] ]"
+    data = loader.load(yaml_input)
+    assert data["result"] == ["a", "b", "scalar", "c"]
+
+
+def test_load_metadata_concat_nested_and_anchors() -> None:
+    loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
+    # Use anchor and alias to force generator usage in ruamel.yaml
+    yaml_input = "result: !concat [ &l [a, b], *l ]"
+    data = loader.load(yaml_input)
+    assert data["result"] == ["a", "b", "a", "b"]
+
+
+def test_concat_constructor_container_unwrapping(mocker: MockerFixture) -> None:
+    """Verify that concat_constructor correctly unwraps ruamel.yaml containers.
+
+    In ruamel.yaml (when using typ='safe'), the construct_object method does not always
+    return the final Python object immediately.
+    For complex structures like sequences (lists) and mappings (dicts), it returns a generator.
+    This design allows the library to handle self-referential anchors and aliases
+    by yielding a placeholder before fully populating the object.
+    This test ensures that concat_constructor correctly detects these generators and
+    "unwraps" them to get the actual list or dictionary content.
+    The test uses mock to simulate the internal state of ruamel.yaml without actually parsing a YAML string:
+      1. `mock_constructor`: Mocks the SafeConstructor.
+      2. `my_container()`: generator that yields a list: ["unwrapped"].
+      3. `mock_node`: Mocks a SequenceNode (the !concat tag's content).
+      4. `construct_object` setup: The mock is configured to return the my_container() generator when called.
+    """
+    mock_constructor = mocker.Mock()
+
+    def my_container() -> Iterator[list[str]]:
+        yield ["unwrapped"]
+
+    # object with __next__
+    mock_constructor.construct_object.return_value = my_container()
+
+    mock_node = mocker.Mock(spec=SequenceNode)
+    mock_node.value = [mocker.Mock()]
+
+    it = concat_constructor(mock_constructor, mock_node)
+    res = next(it)
+    with pytest.raises(StopIteration):
+        next(it)
+    assert res == ["unwrapped"]
+
+
+def test_concat_with_tuple_behavior() -> None:
+    """Demonstrate why hasattr(obj, '__next__') is required over '__iter__'.
+
+    Using __iter__ a tuple would be incorrectly 'unwrapped', resulting in
+    only the first element being appended.
+    """
+    loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
+
+    # We manually inject a tuple into the sequence to simulate a custom tag
+    # or a complex ruamel.yaml state.
+    class TupleConstructor(SafeConstructor):
+        def construct_tuple(self, node: SequenceNode) -> tuple:
+            return tuple(self.construct_sequence(node))
+
+    loader.Constructor.add_constructor("!tuple", TupleConstructor.construct_tuple)
+
+    # YAML input where !concat contains a tuple
+    yaml_input = "result: !concat [ !tuple [a, b], [c] ]"
+    data = loader.load(yaml_input)
+
+    assert data["result"] == [("a", "b"), "c"]

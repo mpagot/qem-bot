@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ruamel.yaml import YAML, YAMLError
+from ruamel.yaml.constructor import ConstructorError, SafeConstructor
+from ruamel.yaml.nodes import SequenceNode
 
 from openqabot.errors import NoTestIssuesError
 from openqabot.types.aggregate import Aggregate
@@ -19,6 +21,7 @@ from openqabot.utils import get_yml_list
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+
 
 log = getLogger("bot.loader.config")
 
@@ -81,6 +84,57 @@ def _load_one_metadata(
                 log.info("Aggregate configuration skipped: Missing 'test_issues' for product %s", product)
 
 
+class ConcatSafeConstructor(SafeConstructor):
+    """Custom YAML constructor with !concat support.
+
+    Subclasses ``SafeConstructor`` to isolate the ``!concat`` tag from
+    the global namespace. In ``ruamel.yaml``, tag constructors registered via
+    ``add_constructor`` on a class are shared across all loader instances using
+    that class. By design qem-bot only support !concat on the metadata yaml.
+    Subclassing ensure that ``!concat`` is only available for parser used for metadata.
+    """
+
+
+def concat_constructor(constructor: SafeConstructor, node: SequenceNode) -> Iterator[list[Any]]:
+    """Concatenate multiple lists for the YAML !concat tag.
+
+    This constructor uses a two-step process to support recursive references
+    (anchors/aliases). It first yields an empty placeholder list so the
+    library can register its reference before it is fully populated. This
+    allows aliases pointing to this node to be resolved correctly.
+
+    Yields:
+        The concatenated list (initially empty to support recursive references).
+
+    """
+    # ensures that the !concat tag is only used on a YAML sequence
+    if not isinstance(node, SequenceNode):
+        raise ConstructorError(
+            None,
+            None,
+            f"expected a sequence node for !concat, but found {node.id!r}",
+            node.start_mark,
+        )
+    res: list[Any] = []
+    yield res
+    # Unwrapping: takes every item in the !concat and merges them into the res list.
+    for child in node.value:
+        obj = constructor.construct_object(child, deep=True)
+        # ruamel.yaml SafeConstructor returns generators for sequence and
+        # mapping nodes to support recursive references. Resolve them by
+        # calling next(), using __next__ to target these generators while
+        # avoiding accidental consumption of other iterables (like tuples).
+        if not isinstance(obj, (list, dict, str, bytes)) and hasattr(obj, "__next__"):
+            obj = next(iter(obj))
+        if isinstance(obj, list):
+            res.extend(obj)
+        else:
+            res.append(obj)
+
+
+ConcatSafeConstructor.add_constructor("!concat", concat_constructor)
+
+
 def load_metadata(
     path: Path,
     *,
@@ -90,6 +144,7 @@ def load_metadata(
 ) -> list[Aggregate | Submissions]:
     """Load metadata configurations from a directory of YAML files."""
     loader = YAML(typ="safe")
+    loader.Constructor = ConcatSafeConstructor
     log.debug("Loading metadata from %s: Submissions=%s, Aggregates=%s", path, not submissions, not aggregate)
 
     return [
@@ -126,6 +181,7 @@ def _parse_product(path: Path, data: dict) -> Iterator[Data]:
 
 def read_products(path: Path) -> list[Data]:
     """Read product definitions from a directory of YAML files."""
+    # Intentional: !concat tag is only supported in load_metadata.
     loader = YAML(typ="safe")
     log.debug("Loading product definitions from %s", path)
 
@@ -134,6 +190,7 @@ def read_products(path: Path) -> list[Data]:
 
 def get_onearch(path: Path) -> set[str]:
     """Read single-architecture package names from a YAML file."""
+    # Intentional: !concat tag is only supported in load_metadata.
     loader = YAML(typ="safe")
 
     try:

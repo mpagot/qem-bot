@@ -132,6 +132,36 @@ incidents:
 
 All optional keys can be omitted. By default qem-bot schedules Incidents for any matching `issue`, for any package in Incident, with computed job priority and with `aggregate_job: true`.
 
+## Advanced Configuration: Concatenating Lists with !concat
+
+For complex configurations where several products or flavors share similar package lists or architectures, `qem-bot` supports a custom YAML tag `!concat`. This tag allows you to merge multiple lists (usually defined as anchors) into a single one.
+
+### Syntax
+`packages: !concat [*list_alias, *another_alias, single-package]`
+
+### Example
+You can define fragments (starting with `.` to be ignored by the parser) and then merge them where needed:
+
+```yaml
+.kernel_common: &kernel_common
+  - kernel-source
+  - kernel-macros
+
+.kernel_azure_specific: &kernel_azure
+  - kernel-azure
+  - kernel-azure-devel
+
+product: SLES15SP5
+incidents:
+  FLAVOR:
+    Server-DVD-Azure:
+      packages: !concat [*kernel_common, *kernel_azure, azure-hv-drivers]
+```
+
+### Constraints
+* The `!concat` tag must be followed by a YAML sequence (list).
+* It is currently only supported within product metadata configuration files and not in other configuration files like `singlearch.yml` or `products.yml`.
+
 ## Structure of product definitions for product increments
 The `increment-approve` command uses a different configuration format than
 described above. The `increment-approve` can be run with its configuration
