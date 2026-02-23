@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Common type definitions."""
 
+from __future__ import annotations
+
 from typing import NamedTuple
 
 from openqabot.config import OBS_REPO_TYPE
@@ -14,6 +16,32 @@ class Repos(NamedTuple):
     version: str  # for SLFO it is the OBS project name; for others it is the product version
     arch: str
     product_version: str = ""  # if non-empty, "version" is the codestream version or OBS project
+
+    def compute_url(
+        self,
+        base: str,
+        product_name: str | None = None,
+        arch: str | None = None,
+        path: str = "repodata/repomd.xml",
+        project: str | None = None,
+    ) -> str:
+        """Construct the repository URL."""
+        arch = arch or self.arch
+        if project == "SLFO" or self.product.startswith("SUSE:SLFO"):
+            product = self.product.replace(":", ":/")
+            version = self.version.replace(":", ":/")
+            start = f"{base}/{product}:/{version}/{OBS_REPO_TYPE}"
+            if not product_name:
+                return f"{start}/{path}"
+            if not self.product_version:
+                msg = f"Product version must be provided for {product_name}"
+                raise ValueError(msg)
+            return f"{start}/repo/{product_name}-{self.product_version}-{arch}/{path}"
+
+        url_base = f"{base}/{project.replace(':', ':/')}" if project else base
+        if self.product.startswith("openSUSE"):
+            return f"{url_base}/SUSE_Updates_{self.product}_{self.version}/{path}"
+        return f"{url_base}/SUSE_Updates_{self.product}_{self.version}_{arch}/{path}"
 
 
 class ProdVer(NamedTuple):
@@ -29,21 +57,12 @@ class ProdVer(NamedTuple):
         product_name: str,
         arch: str,
         path: str = "repodata/repomd.xml",
+        project: str | None = "SLFO",
     ) -> str:
         """Construct the repository URL for a Gitea submission."""
-        # return codestream repo if product name is empty
-        product = self.product.replace(":", ":/")
-        version = self.version.replace(":", ":/")
-        start = f"{base}/{product}:/{version}/{OBS_REPO_TYPE}"
-        # for empty product assign something like `http://download.suse.de/ibs/SUSE:/SLFO:/1.1.99:/PullRequest:/166/standard/repodata/repomd.xml`
-        # otherwise return product repo for specified product
-        # assing something like `https://download.suse.de/ibs/SUSE:/SLFO:/1.1.99:/PullRequest:/166:/SLES/product/repo/SLES-15.99-x86_64/repodata/repomd.xml`
-        if not product_name:
-            return f"{start}/{path}"
-        if not self.product_version:
-            msg = f"Product version must be provided for {product_name}"
-            raise ValueError(msg)
-        return f"{start}/repo/{product_name}-{self.product_version}-{arch}/{path}"
+        # This is a bit redundant but keeps ProdVer functional until it can be fully removed
+        repo = Repos(self.product, self.version, arch, self.product_version)
+        return repo.compute_url(base, product_name, arch, path, project)
 
 
 class Data(NamedTuple):

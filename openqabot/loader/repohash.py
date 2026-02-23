@@ -14,13 +14,14 @@ from requests.exceptions import RetryError
 
 from openqabot.config import OBS_DOWNLOAD_URL
 from openqabot.errors import NoRepoFoundError
-from openqabot.types.types import ProdVer, Repos
 from openqabot.utils import retry5 as retried_requests
 
 from . import gitea
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from openqabot.types.types import Repos
 
 log = getLogger("bot.loader.repohash")
 
@@ -48,22 +49,12 @@ def get_max_revision(
         else f"Submission for project {project} skipped"
     )
 
-    url_base = f"{OBS_DOWNLOAD_URL}/{project.replace(':', ':/')}"
-
     for repo in repos:
-        # handle URLs for SLFO specifically
-        if project == "SLFO":
-            p_ver = options.product_version or repo.product_version
-            prodver = ProdVer(product=repo.product, version=repo.version, product_version=p_ver)
-            url = prodver.compute_url(
-                OBS_DOWNLOAD_URL, options.product_name or gitea.get_product_name(repo.version), arch
-            )
-            log.debug("Computing RepoHash for %s from %s", repo.version, url)
-        # openSUSE and SLE submissions have different handling of architecture
-        elif repo.product.startswith("openSUSE"):
-            url = f"{url_base}/SUSE_Updates_{repo.product}_{repo.version}/repodata/repomd.xml"
-        else:
-            url = f"{url_base}/SUSE_Updates_{repo.product}_{repo.version}_{arch}/repodata/repomd.xml"
+        product_name = options.product_name or gitea.get_product_name(repo.version)
+        product_version = options.product_version or repo.product_version
+        repo_with_opts = repo._replace(product_version=product_version)
+        url = repo_with_opts.compute_url(OBS_DOWNLOAD_URL, product_name, arch, project=project)
+        log.debug("Computing RepoHash for %s from %s", repo.version, url)
 
         try:
             req = retried_requests.get(url)

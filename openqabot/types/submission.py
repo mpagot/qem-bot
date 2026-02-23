@@ -193,7 +193,9 @@ class Submission:
         for archver, lrepos in tmpdict.items():
             repos_to_check = lrepos
             if project == "SLFO" and options.product_name:
-                filtered_repos = [r for r in lrepos if options.product_name.startswith(gitea.get_product_name(r[1]))]
+                filtered_repos = [
+                    r for r in lrepos if options.product_name.startswith(gitea.get_product_name(r.version))
+                ]
                 if not filtered_repos:
                     continue
                 repos_to_check = filtered_repos

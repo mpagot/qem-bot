@@ -26,7 +26,6 @@ from osc.connection import http_GET
 from osc.core import MultibuildFlavorResolver
 
 from openqabot.config import GIT_REVIEW_BOT, GITEA, OBS_DOWNLOAD_URL, OBS_GROUP, OBS_PRODUCTS, OBS_REPO_TYPE, OBS_URL
-from openqabot.types.types import ProdVer
 from openqabot.utils import retry10 as retried_requests
 
 if TYPE_CHECKING:
@@ -128,10 +127,10 @@ def compute_repo_url_for_job_setting(
 ) -> str:
     """Construct repository URLs for openQA job settings."""
     product_names = get_product_name(repo.version) if product_repo is None else product_repo
-    product_version = repo.product_version if product_version is None else product_version
+    p_ver = product_version or repo.product_version
     product_list = product_names if isinstance(product_names, list) else [product_names]
-    prodver = ProdVer(repo.product, repo.version, product_version or "")
-    return ",".join(prodver.compute_url(base, p, repo.arch, "") for p in product_list)
+    repo_with_opts = repo._replace(product_version=p_ver)
+    return ",".join(repo_with_opts.compute_url(base, p, path="", project="SLFO") for p in product_list)
 
 
 def get_open_prs(token: dict[str, str], repo: str, *, dry: bool, number: int | None) -> list[Any]:
