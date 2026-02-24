@@ -109,7 +109,7 @@ def test_aggregate_call_pc_pint(aggregate_factory: Any, config: dict, mocker: Mo
     """Test with setting PUBLIC_CLOUD_PINT_QUERY to call apply_publiccloud_pint_image."""
     acc = aggregate_factory(settings={"PUBLIC_CLOUD_PINT_QUERY": None}, config=config)
     mocker.patch(
-        "openqabot.types.aggregate.apply_publiccloud_pint_image",
+        "openqabot.pc_helper.apply_publiccloud_pint_image",
         return_value={"PUBLIC_CLOUD_IMAGE_ID": "Hola", "PUBLIC_CLOUD_TOOLS_IMAGE_BASE": "Base"},
     )
     mocker.patch("openqabot.types.aggregate.get_json", return_value=[{"repohash": "old", "build": "old"}])
@@ -124,7 +124,7 @@ def test_aggregate_call_pc_pint_with_submissions(
     config["test_issues"] = {"AAAAAAA": "BBBBBBBBB:CCCCCCCC"}
     acc = aggregate_factory(product="product", settings={"PUBLIC_CLOUD_PINT_QUERY": None}, config=config)
     mocker.patch(
-        "openqabot.types.aggregate.apply_publiccloud_pint_image",
+        "openqabot.pc_helper.apply_publiccloud_pint_image",
         return_value={"PUBLIC_CLOUD_IMAGE_ID": "Hola", "PUBLIC_CLOUD_TOOLS_IMAGE_BASE": "Base"},
     )
     sub = submission_mock(product="BBBBBBBBB", version="CCCCCCCC", arch="ciao")
@@ -155,13 +155,13 @@ def test_aggregate_call_pc_tools_fail(
     config["test_issues"] = {"I": "P:V"}
     acc = aggregate_factory(product="product", settings={"PUBLIC_CLOUD_TOOLS_IMAGE_QUERY": "query"}, config=config)
     mocker.patch("openqabot.types.aggregate.get_json", return_value=[{"repohash": "old", "build": "old"}])
-    mocker.patch("openqabot.types.aggregate.apply_pc_tools_image", return_value=None)
+    mocker.patch("openqabot.pc_helper.apply_pc_tools_image", return_value=None)
 
     sub = submission_mock(product="P", version="V", arch="ciao")
     sub.id = "I"
     res = acc(submissions=[sub], token={}, ci_url=None)
     assert res == []
-    assert "No tools image found for <Aggregate product: product>" in caplog.text
+    assert "No tools image found for query" in caplog.text
 
 
 @pytest.mark.usefixtures("request_mock")
@@ -173,13 +173,13 @@ def test_aggregate_call_pc_pint_fail(
     config["test_issues"] = {"I": "P:V"}
     acc = aggregate_factory(product="product", settings={"PUBLIC_CLOUD_PINT_QUERY": "query"}, config=config)
     mocker.patch("openqabot.types.aggregate.get_json", return_value=[{"repohash": "old", "build": "old"}])
-    mocker.patch("openqabot.types.aggregate.apply_publiccloud_pint_image", return_value=None)
+    mocker.patch("openqabot.pc_helper.apply_publiccloud_pint_image", return_value=None)
 
     sub = submission_mock(product="P", version="V", arch="ciao")
     sub.id = "I"
     res = acc(submissions=[sub], token={}, ci_url=None)
     assert res == []
-    assert "No PINT image found for <Aggregate product: product>" in caplog.text
+    assert "No PINT image found for query" in caplog.text
 
 
 def test_get_buildnr_same_build() -> None:
@@ -276,9 +276,7 @@ def test_aggregate_call_pc_tools_success(aggregate_factory: Any, submission_mock
     config = {"FLAVOR": "None", "archs": ["A"], "test_issues": {"I": "P:V"}}
     acc = aggregate_factory("product", settings={"PUBLIC_CLOUD_TOOLS_IMAGE_QUERY": "query"}, config=config)
     mocker.patch("openqabot.types.aggregate.get_json", return_value=[{"repohash": "old", "build": "old"}])
-    mocker.patch(
-        "openqabot.types.aggregate.apply_pc_tools_image", return_value={"PUBLIC_CLOUD_TOOLS_IMAGE_BASE": "Base"}
-    )
+    mocker.patch("openqabot.pc_helper.apply_pc_tools_image", return_value={"PUBLIC_CLOUD_TOOLS_IMAGE_BASE": "Base"})
     sub = submission_mock(product="P", version="V", arch="A")
     sub.id = "I"
     res = acc([sub], {}, ci_url=None)

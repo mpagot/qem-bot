@@ -19,6 +19,7 @@ import osc.core
 from openqabot import config
 from openqabot.config import OBSOLETE_PARAMS
 from openqabot.openqa import OpenQAInterface
+from openqabot.pc_helper import apply_public_cloud_settings
 
 from .errors import AmbiguousApprovalStatusError, PostOpenQAError
 from .loader.buildinfo import load_build_info
@@ -367,11 +368,12 @@ class IncrementApprover:
         error_count = 0
         for p in params:
             suffix = f": {p}" if self.args.dry else ""
-            log.info("Scheduling jobs for %s%s", build_info.string_with_params(p), suffix)
+            settings = apply_public_cloud_settings(p.copy()) or p
+            log.info("Scheduling jobs for %s%s", build_info.string_with_params(settings), suffix)
             if self.args.dry:
                 continue
             try:
-                self.client.post_job(p)
+                self.client.post_job(settings)
             except PostOpenQAError:
                 error_count += 1
         return error_count
