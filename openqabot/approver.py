@@ -139,13 +139,13 @@ class Approver:
             a_jobs = []
 
         if not self.get_submission_result(s_jobs, "api/jobs/incident/", sub.sub, submission_type=sub.type):
-            log.info("%s has at least one failed job in submission tests", ms2str(sub))
+            log.info("%s has at least one not-ok job in submission tests", ms2str(sub))
             return False
 
         if any(s.with_aggregate for s in s_jobs) and not self.get_submission_result(
             a_jobs, "api/jobs/update/", sub.sub, submission_type=sub.type
         ):
-            log.info("%s has at least one failed job in aggregate tests", ms2str(sub))
+            log.info("%s has at least one not-ok job in aggregate tests", ms2str(sub))
             return False
 
         # everything is green --> add submission to approve list
@@ -201,7 +201,7 @@ class Approver:
 
     def was_older_job_ok(
         self,
-        failed_job_id: int,
+        not_ok_job_id: int,
         sub: int,
         job: dict,
         oldest_build_usable: datetime,
@@ -217,8 +217,8 @@ class Approver:
         # Check the job is not too old
         if job_build_date < oldest_build_usable:
             log.info(
-                "Ignoring failed aggregate %s for aggregate %s skipped: Older jobs are too old",
-                failed_job_id,
+                "Ignoring not-ok aggregate %s for aggregate %s skipped: Older jobs are too old",
+                not_ok_job_id,
                 sub,
             )
             return False
@@ -230,34 +230,34 @@ class Approver:
         if not self.job_contains_submission(job["id"], sub):
             # Likely older jobs don't have it either. Giving up
             log.info(
-                "Ignoring failed aggregate %s for aggregate %s skipped: "
+                "Ignoring not-ok aggregate %s for aggregate %s skipped: "
                 "Older passing jobs do not have the submission under test",
-                failed_job_id,
+                not_ok_job_id,
                 sub,
             )
             return False
 
         if not self.validate_job_qam(job["id"]):
             log.info(
-                "Ignoring failed aggregate %s using %s for aggregate %s skipped: "
+                "Ignoring not-ok aggregate %s using %s for aggregate %s skipped: "
                 "Job not present in qem-dashboard, likely belongs to an older request",
-                failed_job_id,
+                not_ok_job_id,
                 job["id"],
                 sub,
             )
             return False
 
-        log.info("Ignoring failed aggregate %s and using instead %s for aggregate %s", failed_job_id, job["id"], sub)
+        log.info("Ignoring not-ok aggregate %s and using instead %s for aggregate %s", not_ok_job_id, job["id"], sub)
         return True
 
     @lru_cache(maxsize=512)  # noqa: B019
-    def was_ok_before(self, failed_job_id: int, sub: int) -> bool:
+    def was_ok_before(self, not_ok_job_id: int, sub: int) -> bool:
         """Check if a similar job was successful before."""
         # We need a considerable amount of older jobs, since there could be many failed manual restarts from same day
-        jobs = self.client.get_older_jobs(failed_job_id, 20)
+        jobs = self.client.get_older_jobs(not_ok_job_id, 20)
         data = jobs.get("data", [])
         if len(data) == 0:
-            log.info("Cannot find older jobs for failed job %s", failed_job_id)
+            log.info("Cannot find older jobs for not-ok job %s", not_ok_job_id)
             return False
 
         current_job, older_jobs = data[0], data[1:]
@@ -272,10 +272,10 @@ class Approver:
         oldest_build_usable = current_build_date - timedelta(days=config.settings.oldest_approval_job_days)
 
         for job in older_jobs:
-            if (was_ok := self.was_older_job_ok(failed_job_id, sub, job, oldest_build_usable)) is not None:
+            if (was_ok := self.was_older_job_ok(not_ok_job_id, sub, job, oldest_build_usable)) is not None:
                 return was_ok
         log.info(
-            "Cannot ignore aggregate failure %s for aggregate %s: No suitable older jobs found.", failed_job_id, sub
+            "Cannot ignore aggregate failure %s for aggregate %s: No suitable older jobs found.", not_ok_job_id, sub
         )
         return False
 
@@ -284,7 +284,7 @@ class Approver:
         return job_result["status"] == "passed"
 
     def mark_jobs_as_acceptable_for_submission(self, job_results: list[dict], sub: int) -> None:
-        """Mark failed jobs as acceptable if they have corresponding openQA comments."""
+        """Mark not-ok jobs as acceptable if they have corresponding openQA comments."""
         for job_result in job_results:
             if self.is_job_passing(job_result):
                 continue
@@ -301,7 +301,7 @@ class Approver:
         url = f"{self.client.url.geturl()}/t{job_id}"
         if job_result.get(f"acceptable_for_{sub}"):
             log.info(
-                "Ignoring failed job %s for submission %s:%s (manually marked as acceptable)",
+                "Ignoring not-ok job %s for submission %s:%s (manually marked as acceptable)",
                 url,
                 self.submission_type or config.settings.default_submission_type,
                 sub,
@@ -309,7 +309,7 @@ class Approver:
             return True
         if api == "api/jobs/update/" and self.was_ok_before(job_id, sub):
             log.info(
-                "Ignoring failed aggregate job %s for submission %s:%s due to older eligible openQA job being ok",
+                "Ignoring not-ok aggregate job %s for submission %s:%s due to older eligible openQA job being ok",
                 url,
                 self.submission_type or config.settings.default_submission_type,
                 sub,
@@ -317,7 +317,7 @@ class Approver:
             return True
 
         log.info(
-            "Found failed, not-ignored job %s for submission %s:%s",
+            "Found not-ok, not-ignored job %s for submission %s:%s",
             url,
             self.submission_type or config.settings.default_submission_type,
             sub,

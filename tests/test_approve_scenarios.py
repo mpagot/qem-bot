@@ -108,7 +108,7 @@ def test_no_jobs(caplog: pytest.LogCaptureFixture, mocker: MockerFixture) -> Non
     caplog.set_level(logging.DEBUG, logger="bot.approver")
     mocker.patch("openqabot.approver.get_json", return_value=[])
     approver()
-    assert "SUSE:Maintenance:4:400 has at least one failed job in submission tests" in caplog.messages
+    assert "SUSE:Maintenance:4:400 has at least one not-ok job in submission tests" in caplog.messages
     assert "Submissions to approve:" in caplog.messages
     assert "Submission approval process finished" in caplog.messages
     assert "* SUSE:Maintenance:4:400" not in caplog.messages
@@ -117,7 +117,7 @@ def test_no_jobs(caplog: pytest.LogCaptureFixture, mocker: MockerFixture) -> Non
 @responses.activate
 @with_fake_qem("NoResultsError isn't raised")
 @pytest.mark.usefixtures("fake_single_submission_mocks")
-def test_single_submission_failed_not_approved(caplog: pytest.LogCaptureFixture, mocker: MockerFixture) -> None:
+def test_single_submission_not_ok_not_approved(caplog: pytest.LogCaptureFixture, mocker: MockerFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="bot.approver")
 
     def mock_get_json(url: str, **_kwargs: Any) -> Any:
@@ -130,9 +130,9 @@ def test_single_submission_failed_not_approved(caplog: pytest.LogCaptureFixture,
     assert_submission_not_approved(
         caplog.messages,
         "SUSE:Maintenance:1:100",
-        "SUSE:Maintenance:1:100 has at least one failed job in submission tests",
+        "SUSE:Maintenance:1:100 has at least one not-ok job in submission tests",
     )
-    assert "Found failed, not-ignored job http://instance.qa/t100001 for submission smelt:1" in caplog.messages
+    assert "Found not-ok, not-ignored job http://instance.qa/t100001 for submission smelt:1" in caplog.messages
 
 
 @responses.activate
@@ -229,8 +229,8 @@ def test_one_submission_failed(caplog: pytest.LogCaptureFixture, mocker: MockerF
 
     assert approver() == 0
     expected = [
-        "SUSE:Maintenance:1:100 has at least one failed job in submission tests",
-        "Found failed, not-ignored job http://instance.qa/t100001 for submission smelt:1",
+        "SUSE:Maintenance:1:100 has at least one not-ok job in submission tests",
+        "Found not-ok, not-ignored job http://instance.qa/t100001 for submission smelt:1",
         "* SUSE:Maintenance:2:200",
         "* SUSE:Maintenance:3:300",
         "* SUSE:Maintenance:4:400",
@@ -265,8 +265,8 @@ def test_one_aggr_failed(caplog: pytest.LogCaptureFixture, mocker: MockerFixture
 
     assert approver() == 0
     expected = [
-        "SUSE:Maintenance:2:200 has at least one failed job in aggregate tests",
-        "Found failed, not-ignored job http://instance.qa/t100001 for submission smelt:2",
+        "SUSE:Maintenance:2:200 has at least one not-ok job in aggregate tests",
+        "Found not-ok, not-ignored job http://instance.qa/t100001 for submission smelt:2",
         "* SUSE:Maintenance:1:100",
         "* SUSE:Maintenance:3:300",
         "* SUSE:Maintenance:4:400",
