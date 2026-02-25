@@ -134,3 +134,21 @@ def get_recent_pint_image(
     if not filtered_images:
         return None
     return max(filtered_images, key=itemgetter("publishedon"))
+
+
+def apply_public_cloud_settings(settings: dict[str, Any]) -> dict[str, Any] | None:
+    """Apply Public Cloud specific settings if present."""
+    if "PUBLIC_CLOUD_TOOLS_IMAGE_QUERY" in settings:
+        query = settings["PUBLIC_CLOUD_TOOLS_IMAGE_QUERY"]
+        settings = apply_pc_tools_image(settings)
+        if not settings or not settings.get("PUBLIC_CLOUD_TOOLS_IMAGE_BASE", False):
+            log.info("No tools image found for %s", query)
+            return None
+
+    if "PUBLIC_CLOUD_PINT_QUERY" in settings:
+        query = settings["PUBLIC_CLOUD_PINT_QUERY"]
+        settings = apply_publiccloud_pint_image(settings)
+        if not settings or not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
+            log.info("No PINT image found for %s", query)
+            return None
+    return settings

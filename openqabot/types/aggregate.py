@@ -16,7 +16,7 @@ from openqabot import config
 from openqabot.dashboard import get_json
 from openqabot.errors import NoTestIssuesError, SameBuildExistsError
 from openqabot.loader.repohash import merge_repohash
-from openqabot.pc_helper import apply_pc_tools_image, apply_publiccloud_pint_image
+from openqabot.pc_helper import apply_public_cloud_settings
 from openqabot.utc import UTC
 
 from .baseconf import BaseConf, JobConfig
@@ -108,21 +108,6 @@ class Aggregate(BaseConf):
         base_url = f"{config.settings.download_maintenance}{sub.id}/SUSE_Updates_{product}_{version}"
         return f"{base_url}/" if product.startswith("openSUSE") else f"{base_url}_{issues_arch}/"
 
-    def _apply_public_cloud_settings(self, settings: dict[str, Any]) -> dict[str, Any] | None:
-        """Apply Public Cloud specific settings if present."""
-        if "PUBLIC_CLOUD_TOOLS_IMAGE_QUERY" in settings:
-            settings = apply_pc_tools_image(settings)
-            if not settings or not settings.get("PUBLIC_CLOUD_TOOLS_IMAGE_BASE", False):
-                log.info("No tools image found for %s", self)
-                return None
-
-        if "PUBLIC_CLOUD_PINT_QUERY" in settings:
-            settings = apply_publiccloud_pint_image(settings)
-            if not settings or not settings.get("PUBLIC_CLOUD_IMAGE_ID", False):
-                log.info("No PINT image found for %s", self)
-                return None
-        return settings
-
     def _add_incident_data(self, full_post: dict[str, Any], data: PostData) -> None:  # noqa: PLR6301
         """Add incident-specific data to the dashboard post."""
         for template, issues in data.test_submissions.items():
@@ -173,7 +158,7 @@ class Aggregate(BaseConf):
         if ci_url:
             full_post["openqa"]["__CI_JOB_URL"] = ci_url
 
-        settings_data = self._apply_public_cloud_settings(self.settings.copy())
+        settings_data = apply_public_cloud_settings(self.settings.copy())
         if settings_data is None:
             return None
 
